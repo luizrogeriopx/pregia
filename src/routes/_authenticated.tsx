@@ -1,8 +1,9 @@
 import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2, Sparkles, LayoutDashboard, History, Crown, LogOut } from "lucide-react";
+import { Loader2, Sparkles, LayoutDashboard, History, CreditCard, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
   component: AuthenticatedLayout,
@@ -11,10 +12,33 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthenticatedLayout() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    async function checkAdmin() {
+      try {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+        if (data) {
+          setIsAdmin(true);
+        }
+      } catch (err) {
+        console.error("Erro ao verificar cargo admin:", err);
+      }
+    }
+    
+    checkAdmin();
+  }, [user]);
 
   if (loading || !user) {
     return (
@@ -43,7 +67,10 @@ function AuthenticatedLayout() {
         <nav className="flex-1 p-4 space-y-1">
           <NavLink to="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
           <NavLink to="/dashboard/history" icon={History}>Histórico</NavLink>
-          <NavLink to="/dashboard/billing" icon={Crown}>Plano</NavLink>
+          <NavLink to="/dashboard/billing" icon={CreditCard}>Financeiro</NavLink>
+          {isAdmin && (
+            <NavLink to="/admin" icon={Shield}>Painel Admin</NavLink>
+          )}
         </nav>
         <div className="p-4 border-t border-border">
           <div className="text-xs text-muted-foreground mb-2 truncate">{user.email}</div>
