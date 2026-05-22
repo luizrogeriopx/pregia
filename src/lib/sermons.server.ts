@@ -8,14 +8,14 @@ import { generateSermonAnalysis } from "./gemini";
  * Secured by requireSupabaseAuth middleware.
  */
 export const generateSermonFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((url: unknown) => {
+  .inputValidator((url: unknown) => {
     if (typeof url !== "string" || !url.trim()) {
       throw new Error("Uma URL válida do YouTube deve ser informada.");
     }
     return url.trim();
   })
-  .handler(async ({ data: url, context }) => {
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data: url, context }: { data: string; context: any }) => {
     const { supabase, userId } = context;
 
     // 1. Extract YouTube Video ID
@@ -39,24 +39,21 @@ export const generateSermonFn = createServerFn({ method: "POST" })
     let usageRow: any = null;
 
     if (!isPro) {
-      // Check monthly usage for Free users
-      const { data: usage, error: usageError } = await supabase
-        .from("monthly_usage")
-        .select("id, analyses_count")
-        .eq("user_id", userId)
-        .eq("year_month", currentMonth)
-        .maybeSingle();
+      // Check total lifetime usage for Free users (limit to 3 outlines ever)
+      const { count, error: countError } = await supabase
+        .from("sermons")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId);
 
-      if (usageError) {
-        console.error("[Limit Check] Erro ao buscar uso mensal:", usageError);
+      if (countError) {
+        console.error("[Limit Check] Erro ao contar esboços salvos:", countError);
       }
 
-      if (usage && usage.analyses_count >= 3) {
+      if (count !== null && count >= 3) {
         throw new Error(
-          "Você atingiu o limite de 3 análises gratuitas deste mês. Faça upgrade para o plano Pro para ter análises ilimitadas!"
+          "Você atingiu o limite vitalício de 3 esboços gratuitos do plano Free. Faça upgrade para o plano Pro para continuar gerando esboços de forma ilimitada!"
         );
       }
-      usageRow = usage;
     }
 
     // 3. Extract Transcript & Metadata from YouTube
@@ -109,33 +106,7 @@ export const generateSermonFn = createServerFn({ method: "POST" })
       throw new Error("Erro ao salvar o esboço no seu histórico. Tente novamente.");
     }
 
-    // 6. Increment Monthly Usage if Free Plan
-    if (!isPro) {
-      if (usageRow) {
-        // Update existing row
-        const { error: updateError } = await supabase
-          .from("monthly_usage")
-          .update({ analyses_count: usageRow.analyses_count + 1 })
-          .eq("id", usageRow.id);
-        
-        if (updateError) {
-          console.error("[Limit Update Error] Falha ao atualizar uso mensal:", updateError);
-        }
-      } else {
-        // Insert new row
-        const { error: createError } = await supabase
-          .from("monthly_usage")
-          .insert({
-            user_id: userId,
-            year_month: currentMonth,
-            analyses_count: 1,
-          });
-
-        if (createError) {
-          console.error("[Limit Create Error] Falha ao criar uso mensal:", createError);
-        }
-      }
-    }
+    // 6. Increment Monthly Usage is bypassed as we now enforce a hard lifetime limit of 3 outlines for Free plan
 
     return { id: sermon.id };
   });

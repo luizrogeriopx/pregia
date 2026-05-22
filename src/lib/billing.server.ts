@@ -15,14 +15,14 @@ const getStripe = () => {
  * Integrates a mock sandbox mode when Stripe credentials are not configured.
  */
 export const createCheckoutSessionFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((origin: unknown) => {
+  .inputValidator((origin: unknown) => {
     if (typeof origin !== "string" || !origin.trim()) {
       throw new Error("Origem inválida.");
     }
     return origin.trim();
   })
-  .handler(async ({ data: origin, context }) => {
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data: origin, context }: { data: string; context: any }) => {
     const { supabase, userId } = context;
     const stripe = getStripe();
 
@@ -128,14 +128,14 @@ export const createCheckoutSessionFn = createServerFn({ method: "POST" })
  * Server function to verify Stripe subscription after redirect
  */
 export const verifySubscriptionFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((sessionId: unknown) => {
+  .inputValidator((sessionId: unknown) => {
     if (typeof sessionId !== "string" || !sessionId.trim()) {
       throw new Error("ID de sessão inválido.");
     }
     return sessionId.trim();
   })
-  .handler(async ({ data: sessionId, context }) => {
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data: sessionId, context }: { data: string; context: any }) => {
     const { supabase, userId } = context;
     const stripe = getStripe();
 
@@ -153,8 +153,8 @@ export const verifySubscriptionFn = createServerFn({ method: "POST" })
         return { success: false, message: "O pagamento não foi confirmado ainda." };
       }
 
-      const subscription = session.subscription as Stripe.Subscription;
-      const latestInvoice = subscription?.latest_invoice as Stripe.Invoice;
+      const subscription = session.subscription as any;
+      const latestInvoice = subscription?.latest_invoice as any;
 
       const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
       const stripeSubId = subscription.id;
@@ -203,14 +203,14 @@ export const verifySubscriptionFn = createServerFn({ method: "POST" })
  * Server function to generate Customer Portal URL to manage subscription
  */
 export const createPortalSessionFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((origin: unknown) => {
+  .inputValidator((origin: unknown) => {
     if (typeof origin !== "string" || !origin.trim()) {
       throw new Error("Origem inválida.");
     }
     return origin.trim();
   })
-  .handler(async ({ data: origin, context }) => {
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ data: origin, context }: { data: string; context: any }) => {
     const { supabase, userId } = context;
     const stripe = getStripe();
 

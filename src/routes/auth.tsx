@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { validateCPF, formatCPF } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Entrar — PregAI" }] }),
@@ -106,23 +107,43 @@ function SignInForm() {
 function SignUpForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handle = async (e: FormEvent) => {
     e.preventDefault();
+    
+    // Validate CPF format
+    if (!validateCPF(cpf)) {
+      toast.error("CPF inválido. Por favor, confira os números digitados.");
+      return;
+    }
+
     setLoading(true);
+    const cleanCPF = cpf.replace(/[^\d]/g, "");
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: window.location.origin + "/dashboard",
-        data: { full_name: name },
+        data: { 
+          full_name: name,
+          cpf: cleanCPF
+        },
       },
     });
     setLoading(false);
-    if (error) toast.error(error.message);
-    else toast.success("Conta criada! Você já pode entrar.");
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Conta criada! Você já pode entrar.");
+    }
+  };
+
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCpf(formatCPF(e.target.value));
   };
 
   return (
@@ -134,6 +155,16 @@ function SignUpForm() {
       <div className="space-y-2">
         <Label htmlFor="su-email">Email</Label>
         <Input id="su-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="su-cpf">CPF (Único por conta)</Label>
+        <Input 
+          id="su-cpf" 
+          required 
+          placeholder="000.000.000-00" 
+          value={cpf} 
+          onChange={handleCpfChange} 
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="su-pw">Senha</Label>

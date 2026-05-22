@@ -31,28 +31,49 @@ function Dashboard() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [recentSermons, setRecentSermons] = useState<any[]>([]);
   const [fetchingRecent, setFetchingRecent] = useState(true);
+  const [isPro, setIsPro] = useState(false);
+  const [sermonCount, setSermonCount] = useState<number | null>(null);
 
-  // Fetch recent analyses
-  const fetchRecent = async () => {
+  // Fetch recent analyses and plan usage
+  const loadDashboardData = async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase
+      // 1. Fetch Subscription
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("plan, status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      const activePro = sub?.plan === "pro" && sub?.status === "active";
+      setIsPro(activePro);
+
+      // 2. Fetch Lifetime Outline count
+      const { count } = await supabase
+        .from("sermons")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      
+      setSermonCount(count || 0);
+
+      // 3. Fetch Recent Outlines
+      const { data: sermons, error: sermonsErr } = await supabase
         .from("sermons")
         .select("id, video_title, preacher_name, theme, created_at, is_favorite")
         .order("created_at", { ascending: false })
         .limit(5);
       
-      if (error) throw error;
-      setRecentSermons(data || []);
+      if (sermonsErr) throw sermonsErr;
+      setRecentSermons(sermons || []);
     } catch (e) {
-      console.error("Erro ao carregar recentes:", e);
+      console.error("Erro ao carregar dados da dashboard:", e);
     } finally {
       setFetchingRecent(false);
     }
   };
 
   useEffect(() => {
-    fetchRecent();
+    loadDashboardData();
   }, [user]);
 
   // Cycle loading messages to engage user during AI generation
@@ -73,6 +94,13 @@ function Dashboard() {
 
   const analyze = async () => {
     if (!url) return;
+    
+    // Safety check on client side
+    if (!isPro && sermonCount !== null && sermonCount >= 3) {
+      toast.error("Você atingiu o limite de 3 esboços gratuitos do plano Free.");
+      return;
+    }
+
     setLoading(true);
     setLoadingStep(0);
     
@@ -91,6 +119,8 @@ function Dashboard() {
     }
   };
 
+  const isLimitReached = !isPro && sermonCount !== null && sermonCount >= 3;
+
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-12">
       {/* Upper Welcome Section */}
@@ -106,6 +136,21 @@ function Dashboard() {
         className="rounded-2xl border border-border bg-card p-6 space-y-6"
         style={{ boxShadow: "var(--shadow-card)" }}
       >
+        {/* Plan usage indicator for free users */}
+        {!isPro && sermonCount !== null && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40 mb-2">
+            <span className="text-xs font-semibold text-muted-foreground">
+              Uso do Plano Grátis: <strong className="text-gold font-bold">{sermonCount} de 3</strong> esboços gerados
+            </span>
+            <div className="w-full sm:w-48 bg-muted h-2 rounded-full overflow-hidden">
+              <div 
+                className="bg-gold h-full rounded-full transition-all duration-500" 
+                style={{ width: `${Math.min((sermonCount / 3) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-wider text-muted-foreground font-bold">
             Link do Vídeo do YouTube
@@ -113,23 +158,23 @@ function Dashboard() {
           <div
             className={`rounded-xl border p-1.5 flex items-center gap-2 transition-all duration-300 ${
               loading ? "border-gold/50 bg-accent/5" : "border-border focus-within:border-gold/50 bg-background"
-            }`}
+            } ${isLimitReached ? "opacity-60 bg-muted/10 cursor-not-allowed" : ""}`}
             style={loading ? { boxShadow: "var(--shadow-glow)" } : undefined}
           >
             <div className="px-3">
-              <Youtube className={`h-5 w-5 ${loading ? "text-gold animate-pulse" : "text-red-400"}`} />
+              <Youtube className={`h-5 w-5 ${loading ? "text-gold animate-pulse" : isLimitReached ? "text-muted-foreground" : "text-red-400"}`} />
             </div>
             <input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              disabled={loading}
-              placeholder="https://www.youtube.com/watch?v=... ou https://youtu.be/..."
+              disabled={loading || isLimitReached}
+              placeholder={isLimitReached ? "Limite gratuito atingido" : "https://www.youtube.com/watch?v=... ou https://youtu.be/..."}
               className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
             />
             <Button
               variant="hero"
               onClick={analyze}
-              disabled={loading || !url}
+              disabled={loading || !url || isLimitReached}
               className="h-11 transition-all duration-300"
             >
               {loading ? (
@@ -146,6 +191,29 @@ function Dashboard() {
             </Button>
           </div>
         </div>
+
+        {/* Limit reached warning banner */}
+        {isLimitReached && (
+          <div className="p-5 rounded-xl bg-gold/5 border border-gold/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-300">
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-gold animate-pulse shrink-0" />
+                Limite do Plano Free atingido
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Você atingiu o limite vitalício de 3 esboços gratuitos. Faça upgrade para o plano Pro por apenas R$27/mês para continuar gerando esboços de forma ilimitada!
+              </p>
+            </div>
+            <Button
+              variant="gold"
+              size="sm"
+              className="font-bold text-xs shadow-sm shrink-0 w-full sm:w-auto"
+              onClick={() => navigate({ to: "/dashboard/billing" })}
+            >
+              Fazer Upgrade Pro
+            </Button>
+          </div>
+        )}
 
         {/* Loading Progress State */}
         {loading && (

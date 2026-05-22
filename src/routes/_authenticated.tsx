@@ -5,6 +5,7 @@ import { Loader2, Sparkles, LayoutDashboard, History, CreditCard, LogOut, Shield
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { validateCPF, formatCPF } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated")({
   component: AuthenticatedLayout,
@@ -22,19 +23,26 @@ function AuthenticatedLayout() {
   const [isIOS, setIsIOS] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Profile CPF states
+  const [profileCpf, setProfileCpf] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [cpfInput, setCpfInput] = useState("");
+  const [savingCpf, setSavingCpf] = useState(false);
+
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [user, loading, navigate]);
 
   useEffect(() => {
     if (!user) return;
+    const currentUserId = user.id;
     
     async function checkAdmin() {
       try {
         const { data } = await supabase
           .from("user_roles")
           .select("role")
-          .eq("user_id", user.id)
+          .eq("user_id", currentUserId)
           .eq("role", "admin")
           .maybeSingle();
         if (data) {
@@ -50,7 +58,7 @@ function AuthenticatedLayout() {
         const { data } = await supabase
           .from("subscriptions")
           .select("plan, status")
-          .eq("user_id", user.id)
+          .eq("user_id", currentUserId)
           .maybeSingle();
         
         // Only trigger PWA for active contracted Pro plan (advantage of being Pro)
@@ -73,9 +81,28 @@ function AuthenticatedLayout() {
         console.error("Erro ao verificar inscrição para PWA:", err);
       }
     }
+
+    async function checkProfile() {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("cpf")
+          .eq("id", currentUserId)
+          .maybeSingle();
+        
+        if (data) {
+          setProfileCpf(data.cpf);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar perfil:", err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    }
     
     checkAdmin();
     checkSubscription();
+    checkProfile();
   }, [user]);
 
   // Load PWA manifest and service worker ONLY if user has a contracted plan
@@ -156,10 +183,125 @@ function AuthenticatedLayout() {
     await signOut();
   };
 
-  if (loading || !user) {
+  const handleCpfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!validateCPF(cpfInput)) {
+      toast.error("CPF inválido. Por favor, confira os números digitados.");
+      return;
+    }
+    
+    setSavingCpf(true);
+    const cleanCPF = cpfInput.replace(/[^\d]/g, "");
+    
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ cpf: cleanCPF })
+        .eq("id", user.id);
+        
+      if (error) {
+        if (error.message?.includes("profiles_cpf_key") || error.code === "23505") {
+          toast.error("Este CPF já está cadastrado em outra conta.");
+        } else {
+          toast.error(error.message || "Erro ao salvar CPF. Tente novamente.");
+        }
+      } else {
+        setProfileCpf(cleanCPF);
+        toast.success("CPF cadastrado e conta ativada!");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Ocorreu um erro ao atualizar os dados.");
+    } finally {
+      setSavingCpf(false);
+    }
+  };
+
+  if (loading || loadingProfile || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!profileCpf) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 text-foreground">
+        <div className="w-full max-w-md space-y-6">
+          <div className="flex items-center gap-2 justify-center mb-2">
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-lg animate-pulse"
+              style={{ background: "var(--gradient-primary)" }}
+            >
+              <Sparkles className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="text-xl font-semibold">
+              Preg<span className="text-gold">AI</span>
+            </span>
+          </div>
+
+          <div
+            className="rounded-2xl border border-border bg-card p-8 space-y-6 relative overflow-hidden"
+            style={{ boxShadow: "var(--shadow-card)" }}
+          >
+            <div className="absolute -right-12 -bottom-12 opacity-5 pointer-events-none">
+              <Sparkles className="h-40 w-40 text-gold" />
+            </div>
+            
+            <div className="space-y-2 text-center">
+              <h2 className="text-xl font-extrabold tracking-tight">Conclua seu cadastro</h2>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Para garantir a segurança da plataforma e liberar o acesso às ferramentas de análise de pregações com IA, precisamos validar o seu CPF.
+              </p>
+            </div>
+
+            <form onSubmit={handleCpfSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="auth-cpf" className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  CPF (Cadastro de Pessoa Física)
+                </label>
+                <input
+                  id="auth-cpf"
+                  type="text"
+                  required
+                  placeholder="000.000.000-00"
+                  value={cpfInput}
+                  onChange={(e) => setCpfInput(formatCPF(e.target.value))}
+                  className="w-full bg-background border border-border rounded-lg px-4 py-3 text-sm outline-none focus:border-gold/50 font-mono"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                variant="gold"
+                className="w-full h-11 font-bold text-sm"
+                disabled={savingCpf}
+              >
+                {savingCpf ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Validando...
+                  </>
+                ) : (
+                  "Ativar Minha Conta"
+                )}
+              </Button>
+            </form>
+
+            <div className="border-t border-border/40 pt-4 flex justify-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={handleSignOut}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Sair da Conta
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

@@ -45,6 +45,7 @@ import {
   updateUserFn,
   getUserSermonsFn
 } from "@/lib/admin.server";
+import { formatCPF } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({ meta: [{ title: "Painel Admin — PregAI" }] }),
@@ -70,6 +71,7 @@ function AdminDashboard() {
   // Edit user modal states
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editName, setEditName] = useState("");
+  const [editCpf, setEditCpf] = useState("");
   const [editRole, setEditRole] = useState("user");
   const [editPlan, setEditPlan] = useState("free");
   const [editStatus, setEditStatus] = useState("active");
@@ -121,6 +123,7 @@ function AdminDashboard() {
         data: {
           targetUserId: editingUser.id,
           fullName: editName,
+          cpf: editCpf,
           role: editRole,
           subscription: {
             plan: editPlan,
@@ -158,6 +161,7 @@ function AdminDashboard() {
   const startEditUser = (targetUser: any) => {
     setEditingUser(targetUser);
     setEditName(targetUser.fullName);
+    setEditCpf(targetUser.cpf ? formatCPF(targetUser.cpf) : "");
     setEditRole(targetUser.role);
     setEditPlan(targetUser.subscription?.plan || "free");
     setEditStatus(targetUser.subscription?.status || "active");
@@ -492,7 +496,12 @@ function AdminDashboard() {
                     </TableCell>
                     
                     <TableCell className="py-3 text-muted-foreground font-mono text-xs">
-                      {item.email}
+                      <div>{item.email}</div>
+                      {item.cpf && (
+                        <div className="text-[10px] text-muted-foreground/60 mt-0.5 font-sans">
+                          CPF: {formatCPF(item.cpf)}
+                        </div>
+                      )}
                     </TableCell>
                     
                     <TableCell className="py-3">
@@ -615,6 +624,17 @@ function AdminDashboard() {
                     required
                     placeholder="Nome Completo do Aluno"
                     className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs outline-none focus:border-gold/50"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs uppercase tracking-wider text-muted-foreground font-bold">CPF</label>
+                  <input
+                    type="text"
+                    value={editCpf}
+                    onChange={(e) => setEditCpf(formatCPF(e.target.value))}
+                    placeholder="000.000.000-00"
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs outline-none focus:border-gold/50 font-mono"
                   />
                 </div>
 
