@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import heroBg from "@/assets/hero-bg.jpg";
 import { Button } from "@/components/ui/button";
 import {
@@ -84,8 +84,12 @@ function Header() {
           <a href="#faq" className="hover:text-foreground transition">FAQ</a>
         </nav>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">Entrar</Button>
-          <Button variant="hero" size="sm">Começar grátis</Button>
+          <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
+            <Link to="/auth">Entrar</Link>
+          </Button>
+          <Button variant="hero" size="sm" asChild>
+            <Link to="/auth">Começar grátis</Link>
+          </Button>
         </div>
       </div>
     </header>
