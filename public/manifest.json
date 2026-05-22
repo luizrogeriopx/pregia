@@ -1,0 +1,24 @@
+{
+  "name": "Pregador Vocacionado",
+  "short_name": "PregAI",
+  "description": "Transforme pregações do YouTube em esboços, slides e posts com Inteligência Artificial.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#020817",
+  "theme_color": "#e2b857",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
