@@ -53,9 +53,21 @@ function AuthenticatedLayout() {
           .eq("user_id", user.id)
           .maybeSingle();
         
-        // Only trigger PWA for active contracted plans (free or pro)
-        if (data && data.status === "active" && (data.plan === "free" || data.plan === "pro")) {
+        // Only trigger PWA for active contracted Pro plan (advantage of being Pro)
+        if (data && data.status === "active" && data.plan === "pro") {
           setHasPlan(true);
+        } else {
+          setHasPlan(false);
+          // If they downgraded or lost Pro status, clean up PWA components immediately
+          const link = document.querySelector("link[rel='manifest']");
+          if (link) link.remove();
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then((registrations) => {
+              for (const reg of registrations) {
+                reg.unregister();
+              }
+            });
+          }
         }
       } catch (err) {
         console.error("Erro ao verificar inscrição para PWA:", err);
