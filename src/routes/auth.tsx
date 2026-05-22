@@ -12,6 +12,11 @@ import { toast } from "sonner";
 import { validateCPF, formatCPF } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): { url?: string } => {
+    return {
+      url: typeof search.url === "string" ? search.url : undefined,
+    };
+  },
   head: () => ({ meta: [{ title: "Entrar — PregAI" }] }),
   component: AuthPage,
 });
@@ -19,10 +24,16 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
+  const { url } = Route.useSearch();
 
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/dashboard" });
-  }, [user, loading, navigate]);
+    if (!loading && user) {
+      navigate({
+        to: "/dashboard",
+        search: url ? { url } : {},
+      });
+    }
+  }, [user, loading, navigate, url]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">

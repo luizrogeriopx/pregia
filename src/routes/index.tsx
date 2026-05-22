@@ -1,4 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
 import heroBg from "@/assets/hero-bg.jpg";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,6 +100,30 @@ function Header() {
 }
 
 function Hero() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [url, setUrl] = useState("");
+
+  const handleAnalyze = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!url.trim()) {
+      toast.error("Por favor, cole um link do YouTube.");
+      return;
+    }
+
+    if (user) {
+      navigate({
+        to: "/dashboard",
+        search: { url: url.trim() },
+      });
+    } else {
+      navigate({
+        to: "/auth",
+        search: { url: url.trim() },
+      });
+    }
+  };
+
   return (
     <section className="relative overflow-hidden">
       <img
@@ -129,11 +156,13 @@ function Hero() {
             com excelência teológica.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button variant="hero" size="lg" className="group">
+            <Button variant="hero" size="lg" className="group" onClick={() => handleAnalyze()}>
               Começar gratuitamente
               <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
-            <Button variant="outline" size="lg">Ver demonstração</Button>
+            <Button variant="outline" size="lg" asChild>
+              <a href="#how">Ver demonstração</a>
+            </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
             3 análises grátis por mês · sem cartão de crédito
@@ -141,7 +170,7 @@ function Hero() {
         </div>
 
         {/* URL input mockup */}
-        <div className="mx-auto mt-16 max-w-2xl">
+        <form onSubmit={handleAnalyze} className="mx-auto mt-16 max-w-2xl">
           <div
             className="rounded-2xl border border-border bg-card/80 backdrop-blur p-2 flex items-center gap-2"
             style={{ boxShadow: "var(--shadow-glow)" }}
@@ -152,13 +181,15 @@ function Hero() {
             <input
               type="text"
               placeholder="https://youtube.com/watch?v=..."
-              className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground text-foreground"
             />
-            <Button variant="hero" size="sm">
+            <Button variant="hero" size="sm" type="submit">
               Analisar <Sparkles className="ml-1.5 h-3.5 w-3.5" />
             </Button>
           </div>
-        </div>
+        </form>
       </div>
     </section>
   );

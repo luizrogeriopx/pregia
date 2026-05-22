@@ -8,6 +8,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
+  validateSearch: (search: Record<string, unknown>): { url?: string } => {
+    return {
+      url: typeof search.url === "string" ? search.url : undefined,
+    };
+  },
   head: () => ({ meta: [{ title: "Dashboard — PregAI" }] }),
   component: Dashboard,
 });
@@ -26,6 +31,7 @@ const LOADING_STEPS = [
 function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { url: urlParam } = Route.useSearch();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
@@ -92,8 +98,9 @@ function Dashboard() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  const analyze = async () => {
-    if (!url) return;
+  const analyze = async (targetUrl?: string) => {
+    const urlToAnalyze = typeof targetUrl === "string" ? targetUrl : url;
+    if (!urlToAnalyze) return;
     
     // Safety check on client side
     if (!isPro && sermonCount !== null && sermonCount >= 3) {
@@ -105,7 +112,7 @@ function Dashboard() {
     setLoadingStep(0);
     
     try {
-      const res = await generateSermonFn({ data: url });
+      const res = await generateSermonFn({ data: urlToAnalyze });
       toast.success("Esboço gerado com excelência teológica!");
       navigate({
         to: "/dashboard/sermon/$id",
@@ -118,6 +125,22 @@ function Dashboard() {
       setLoading(false);
     }
   };
+
+  // Auto-trigger analysis if a URL is passed from landing/auth pages
+  useEffect(() => {
+    if (!fetchingRecent && urlParam) {
+      setUrl(urlParam);
+      
+      // Clear the search query from the URL to prevent triggering again on manual refresh
+      navigate({
+        to: "/dashboard",
+        search: {},
+        replace: true,
+      });
+
+      analyze(urlParam);
+    }
+  }, [fetchingRecent, urlParam]);
 
   const isLimitReached = !isPro && sermonCount !== null && sermonCount >= 3;
 
@@ -173,7 +196,7 @@ function Dashboard() {
             />
             <Button
               variant="hero"
-              onClick={analyze}
+              onClick={() => analyze()}
               disabled={loading || !url || isLimitReached}
               className="h-11 transition-all duration-300"
             >
