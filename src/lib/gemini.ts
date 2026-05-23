@@ -144,11 +144,34 @@ export async function generateSermonAnalysis(
   videoTitle: string,
   preacher: string
 ): Promise<SermonAnalysis> {
+  const cleanTranscript = sanitizeSourceContent(transcript);
+  const userPrompt = `Abaixo está a transcrição bruta extraída do áudio de uma pregação. Extraia apenas o miolo teológico e produza um esboço homilético novo e autêntico.\n\nTRANSCRIÇÃO (use só o conteúdo espiritual/bíblico; ignore vinhetas, saudações, pedidos de like/inscrição, propagandas e menções a canal ou pregador):\n"""\n${transcript.slice(0, 45000)}\n"""`;
+
+  return requestSermonAnalysis(userPrompt.replace(transcript.slice(0, 45000), cleanTranscript.slice(0, 45000)), 0.85);
+}
+
+export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
+  return requestSermonAnalysis(
+    [
+      {
+        type: "text",
+        text:
+          "Analise diretamente o conteúdo audiovisual deste vídeo. Use somente aquilo que for falado no áudio, legenda embutida ou transcrição detectável internamente. Ignore completamente título, canal, descrição, comentários, nomes de pessoas, marcas d'água, thumbnails, links e pedidos promocionais. Gere um esboço homilético original, autoral e exclusivo, sem copiar frases literais.",
+      },
+      {
+        type: "video_url",
+        video_url: { url: videoUrl },
+      },
+    ],
+    0.8
+  );
+}
+
+async function requestSermonAnalysis(userContent: string | Array<Record<string, unknown>>, temperature: number): Promise<SermonAnalysis> {
   const apiKey = process.env.LOVABLE_API_KEY;
 
   if (!apiKey) {
-    console.warn("[AI] LOVABLE_API_KEY não configurada. Usando fallback simulado.");
-    return generateMockAnalysis();
+    throw new Error("Serviço de IA indisponível no momento.");
   }
 
   const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição do áudio de uma pregação.
@@ -162,8 +185,6 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 6. Em NENHUM campo (theme, summary, introduction, outline, script, slides, social_posts, etc.) cite o autor original, canal ou origem do vídeo. Trate o material como pregação inédita produzida pelo próprio usuário.
 7. Retorne ESTRITAMENTE um JSON válido conforme o schema fornecido pela ferramenta — sem texto antes ou depois.`;
 
-  const userPrompt = `Abaixo está a transcrição bruta extraída do áudio de uma pregação. Extraia apenas o miolo teológico e produza um esboço homilético novo e autêntico.\n\nTRANSCRIÇÃO (use só o conteúdo espiritual/bíblico; ignore vinhetas, saudações, pedidos de like/inscrição, propagandas e menções a canal ou pregador):\n"""\n${transcript.slice(0, 45000)}\n"""`;
-
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -175,7 +196,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          { role: "user", content: userContent },
         ],
         tools: [
           {
@@ -188,7 +209,8 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
           },
         ],
         tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
-        temperature: 0.85,
+        temperature,
+        max_tokens: 8192,
       }),
     });
 
@@ -210,8 +232,8 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     }
     return JSON.parse(args) as SermonAnalysis;
   } catch (error) {
-    console.error("[Lovable AI Error] Falha ao gerar análise — usando fallback:", error);
-    return generateMockAnalysis();
+    console.error("[Lovable AI Error] Falha ao gerar análise:", error);
+    throw error;
   }
 }
 
@@ -232,6 +254,18 @@ function toJsonSchema(node: any): any {
     return out;
   }
   return node;
+}
+
+function sanitizeSourceContent(text: string): string {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((part) => {
+      const normalized = part.toLowerCase();
+      return !/(\bcanal\b|inscrev|like|sininho|compartilh|coment[aá]rio|descri[cç][aã]o|pastor\s+[a-zà-ÿ]+|pregador\s+[a-zà-ÿ]+|igreja\s+[a-zà-ÿ]+|minist[eé]rio\s+[a-zà-ÿ]+)/i.test(normalized);
+    })
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
