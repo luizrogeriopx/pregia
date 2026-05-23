@@ -186,12 +186,17 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 7. Retorne ESTRITAMENTE um JSON válido conforme o schema fornecido pela ferramenta — sem texto antes ou depois.`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 55000);
+    console.log(`[Lovable AI] Iniciando requisição (temperature=${temperature}, contentType=${typeof userContent === "string" ? "text" : "multimodal"})`);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
@@ -212,7 +217,9 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
         temperature,
         max_tokens: 8192,
       }),
-    });
+    }).finally(() => clearTimeout(timeoutId));
+
+    console.log(`[Lovable AI] Resposta recebida com status ${response.status}`);
 
     if (!response.ok) {
       const errBody = await response.text();
@@ -228,10 +235,15 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     if (!args) {
       const fallbackText = resJson.choices?.[0]?.message?.content;
       if (fallbackText) return JSON.parse(fallbackText) as SermonAnalysis;
+      console.error("[Lovable AI Error] Resposta sem tool_call nem conteúdo. Payload:", JSON.stringify(resJson).slice(0, 500));
       throw new Error("Resposta da IA sem conteúdo estruturado.");
     }
     return JSON.parse(args) as SermonAnalysis;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      console.error("[Lovable AI Error] Timeout após 55s aguardando a IA.");
+      throw new Error("A IA demorou demais para responder. Tente novamente com um vídeo mais curto ou que tenha legendas disponíveis.");
+    }
     console.error("[Lovable AI Error] Falha ao gerar análise:", error);
     throw error;
   }
