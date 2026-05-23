@@ -154,18 +154,18 @@ export async function generateSermonAnalysis(
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const prompt = `
-Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã.
+Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã, focado em extração bíblica pura.
 Analise a seguinte transcrição de uma pregação em vídeo e crie uma análise estruturada contendo esboço homilético, slides, postagens sociais, aplicações práticas e roteiro expandido.
 
-INSTRUÇÕES IMPORTANTES:
-- Mantenha a excelência teológica e o tom respeitoso, inspirador e cristão.
-- Reinterprete e adapte as ideias para criar materiais claros e estruturados, sem fazer plágio ou cópia literal do vídeo.
-- Garanta que todos os campos do JSON schema sejam preenchidos de forma rica e detalhada, em Português.
+REGRAS CRÍTICAS DE PRIVACIDADE E CONTEÚDO:
+- Baseie-se EXCLUSIVAMENTE no conteúdo teológico e bíblico extraído da transcrição (legenda/áudio).
+- PROIBIÇÃO ABSOLUTA: Não inclua no esboço, resumo ou em qualquer campo gerado o nome do canal do YouTube, o nome de outros vídeos, descrições de "inscreva-se", "deixe seu like", comentários de usuários ou informações promocionais do canal.
+- Ignore qualquer introdução do vídeo que peça engajamento social (likes, inscritos) ou que fale sobre a programação do canal.
+- Foque apenas na mensagem, nos princípios espirituais e nas passagens bíblicas citadas.
+- Reinterprete e adapte as ideias para criar materiais claros e estruturados, sem fazer plágio ou cópia literal, mantendo o tom respeitoso e inspirador.
 
-DADOS DA PREGAÇÃO:
-Título do Vídeo: "${videoTitle}"
-Pregador/Canal: "${preacher}"
-Transcrição:
+DADOS PARA ANÁLISE (USE APENAS O CONTEÚDO TEOLÓGICO DISSO):
+Transcrição do Áudio:
 """
 ${transcript.slice(0, 45000)}
 """
