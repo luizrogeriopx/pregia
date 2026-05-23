@@ -170,8 +170,7 @@ async function requestSermonAnalysis(userContent: string | Array<Record<string, 
   const apiKey = process.env.LOVABLE_API_KEY;
 
   if (!apiKey) {
-    console.warn("[AI] LOVABLE_API_KEY não configurada. Usando fallback simulado.");
-    return generateMockAnalysis();
+    throw new Error("Serviço de IA indisponível no momento.");
   }
 
   const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição do áudio de uma pregação.
@@ -232,8 +231,8 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     }
     return JSON.parse(args) as SermonAnalysis;
   } catch (error) {
-    console.error("[Lovable AI Error] Falha ao gerar análise — usando fallback:", error);
-    return generateMockAnalysis();
+    console.error("[Lovable AI Error] Falha ao gerar análise:", error);
+    throw error;
   }
 }
 
