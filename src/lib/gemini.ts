@@ -318,7 +318,7 @@ Portanto, exorto cada um de vocês a aplicar essa palavra. Não saia daqui da me
       {
         platform: "Instagram",
         type: "Feed Devocional",
-        content: `📖 "${mainVerse.text}" (${mainVerse.reference})\n\nVocê já parou para pensar no impacto dessa frase na sua vida prática?\n\nNa pregação "${videoTitle}" de ${preacher}, somos lembrados de que quando colocamos nossa vida sob a direção de Deus, a ansiedade perde o poder. Ele não promete uma jornada sem desafios, mas garante a Sua presença e cuidado constante.\n\nHoje, entregue suas preocupações Aquele que cuida de você. Que a sua semana seja guiada pela paz que excede todo o entendimento! 🙌✨\n\n#PregAI #Sermao #Fe #Devocional #PalavraDeDeus`
+        content: `📖 "${mainVerse.text}" (${mainVerse.reference})\n\nVocê já parou para pensar no impacto dessa frase na sua vida prática?\n\nQuando colocamos nossa vida sob a direção de Deus, a ansiedade perde o poder. Ele não promete uma jornada sem desafios, mas garante a Sua presença e cuidado constante.\n\nHoje, entregue suas preocupações Àquele que cuida de você. Que a sua semana seja guiada pela paz que excede todo o entendimento! 🙌✨\n\n#PregAI #Sermao #Fe #Devocional #PalavraDeDeus`
       },
       {
         platform: "Reels / Shorts",
@@ -328,9 +328,8 @@ Portanto, exorto cada um de vocês a aplicar essa palavra. Não saia daqui da me
     ],
     slides: [
       {
-        title: `${videoTitle}`,
+        title: `${theme}`,
         content: [
-          `Ministrado por ${preacher}`,
           `Tema Central: ${theme}`,
           `Texto Base: ${mainVerse.reference}`
         ]
