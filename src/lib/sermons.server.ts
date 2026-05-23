@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { extractYoutubeVideoId, fetchYoutubeTranscript } from "./youtube";
-import { generateSermonAnalysis } from "./gemini";
+import { generateSermonAnalysis, generateSermonAnalysisFromVideo } from "./gemini";
 
 /**
  * Server Function to analyze a YouTube video URL and generate a sermon outline.
@@ -56,19 +56,27 @@ export const generateSermonFn = createServerFn({ method: "POST" })
       }
     }
 
-    // 3. Extract Transcript & Metadata from YouTube
-    let ytData;
+    // 3. Extract captions/transcript from YouTube when available.
+    let ytData = {
+      transcript: "",
+      title: "Esboço gerado do conteúdo do vídeo",
+      author: "Conteúdo audiovisual",
+    };
+    let transcriptAvailable = false;
+
     try {
       ytData = await fetchYoutubeTranscript(videoId);
+      transcriptAvailable = true;
     } catch (error: any) {
-      console.error("[YouTube Scraping Error] Falha ao extrair transcrição:", error);
-      throw new Error(error?.message || "Falha ao extrair áudio ou transcrição do vídeo. Certifique-se de que o vídeo possui legendas.");
+      console.warn("[YouTube Scraping Warning] Transcrição indisponível; usando análise audiovisual direta:", error);
     }
 
-    // 4. Generate AI Sermon Analysis via Gemini
+    // 4. Generate AI Sermon Analysis from transcript or directly from the video/audio.
     let aiAnalysis;
     try {
-      aiAnalysis = await generateSermonAnalysis(ytData.transcript, ytData.title, ytData.author);
+      aiAnalysis = transcriptAvailable
+        ? await generateSermonAnalysis(ytData.transcript, ytData.title, ytData.author)
+        : await generateSermonAnalysisFromVideo(`https://www.youtube.com/watch?v=${videoId}`);
     } catch (error: any) {
       console.error("[Gemini AI Error] Falha ao gerar análise:", error);
       throw new Error("Erro ao gerar a análise de inteligência artificial da pregação.");
