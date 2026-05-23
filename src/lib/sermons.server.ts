@@ -67,6 +67,7 @@ export const generateSermonFn = createServerFn({ method: "POST" })
     try {
       ytData = await fetchYoutubeTranscript(videoId);
       transcriptAvailable = true;
+      console.log(`[Sermon] Transcrição obtida (${ytData.transcript.length} chars).`);
     } catch (error: any) {
       console.warn("[YouTube Scraping Warning] Transcrição indisponível; usando análise audiovisual direta:", error);
     }
@@ -74,15 +75,18 @@ export const generateSermonFn = createServerFn({ method: "POST" })
     // 4. Generate AI Sermon Analysis from transcript or directly from the video/audio.
     let aiAnalysis;
     try {
+      console.log(`[Sermon] Iniciando geração via IA (modo=${transcriptAvailable ? "transcrição" : "vídeo"}).`);
       aiAnalysis = transcriptAvailable
         ? await generateSermonAnalysis(ytData.transcript, ytData.title, ytData.author)
         : await generateSermonAnalysisFromVideo(`https://www.youtube.com/watch?v=${videoId}`);
+      console.log(`[Sermon] Análise concluída pela IA.`);
     } catch (error: any) {
       console.error("[Gemini AI Error] Falha ao gerar análise:", error);
-      throw new Error("Erro ao gerar a análise de inteligência artificial da pregação.");
+      throw new Error(error?.message || "Erro ao gerar a análise de inteligência artificial da pregação.");
     }
 
     // 5. Save Sermon to Supabase Database
+    console.log(`[Sermon] Salvando esboço no banco para user ${userId}.`);
     const { data: sermon, error: insertError } = await supabase
       .from("sermons")
       .insert({
