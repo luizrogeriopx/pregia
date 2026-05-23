@@ -77,7 +77,9 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
     }
     
     if (!transcriptData || transcriptData.length === 0) {
-      throw new Error("No transcript found");
+      // Strategy 3: Try mobile URL which sometimes bypasses blocks
+      console.warn(`[YouTube] Tentando URL mobile para ${videoId}...`);
+      transcriptData = await YoutubeTranscript.fetchTranscript(`https://m.youtube.com/watch?v=${videoId}`);
     }
 
     const transcript = transcriptData
