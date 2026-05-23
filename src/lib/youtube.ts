@@ -38,18 +38,43 @@ interface YouTubeVideoData {
 export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVideoData> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
-  const response = await fetch(watchUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-    },
-  });
+  let html = "";
+  let directFetchError = null;
 
-  if (!response.ok) {
-    throw new Error(`Não foi possível acessar a página do YouTube (Status: ${response.status})`);
+  try {
+    const response = await fetch(watchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+      },
+    });
+
+    if (response.ok) {
+      html = await response.text();
+    } else {
+      directFetchError = `Status ${response.status}`;
+    }
+  } catch (err: any) {
+    directFetchError = err?.message || err;
   }
 
-  const html = await response.text();
+  // Fallback to free CORS proxy if direct fetch failed (often due to 429 Rate Limit from cloud/data center IPs)
+  if (!html) {
+    console.warn(`[YouTube Scraper] Direct watch page fetch failed (${directFetchError}). Trying proxy fallback...`);
+    try {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(watchUrl)}`;
+      const proxyResponse = await fetch(proxyUrl);
+      if (proxyResponse.ok) {
+        html = await proxyResponse.text();
+        console.log("[YouTube Scraper] Proxy fallback succeeded.");
+      } else {
+        throw new Error(`Proxy status: ${proxyResponse.status}`);
+      }
+    } catch (proxyErr: any) {
+      console.error("[YouTube Scraper] Proxy fallback failed too:", proxyErr);
+      throw new Error(`Não foi possível acessar a página do YouTube (Erro: 429 - Limite de requisições excedido. Tente novamente em instantes.)`);
+    }
+  }
 
   // Try to find the title from HTML tags
   let title = "";
@@ -58,19 +83,55 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
     title = titleMatch[1].replace(" - YouTube", "").trim();
   }
 
-  // Find ytInitialPlayerResponse JSON
-  const regex = /ytInitialPlayerResponse\s*=\s*({.+?});/s;
-  const match = html.match(regex);
-  if (!match) {
+  // Find ytInitialPlayerResponse JSON using robust brace-matching
+  const startKeyword = "ytInitialPlayerResponse = ";
+  const startIdx = html.indexOf(startKeyword);
+  if (startIdx === -1) {
     throw new Error(
       "Não foi possível obter os dados internos do vídeo. O vídeo pode ser privado, restrito ou não permitir carregamento automatizado."
     );
   }
 
+  const jsonStartIdx = startIdx + startKeyword.length;
+  let braceCount = 0;
+  let inString = false;
+  let escape = false;
+  let jsonEndIdx = -1;
+
+  for (let i = jsonStartIdx; i < html.length; i++) {
+    const char = html[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (char === '\\') {
+      escape = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') {
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          jsonEndIdx = i + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  if (jsonEndIdx === -1) {
+    throw new Error("Não foi possível analisar os dados internos do vídeo.");
+  }
+
   let playerResponse: any;
   try {
-    // Extract JSON safely by trimming outer bounds if needed
-    let jsonStr = match[1].trim();
+    const jsonStr = html.substring(jsonStartIdx, jsonEndIdx);
     playerResponse = JSON.parse(jsonStr);
   } catch (err) {
     throw new Error("Erro ao analisar os metadados do vídeo do YouTube.");
@@ -107,8 +168,13 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
     throw new Error("Não foi possível localizar o endereço da transcrição de áudio.");
   }
 
-  // Fetch the XML captions
-  const captionResponse = await fetch(captionUrl);
+  // Fetch the XML captions with proper headers
+  const captionResponse = await fetch(captionUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    },
+  });
   if (!captionResponse.ok) {
     throw new Error(`Não foi possível baixar a legenda selecionada (Status: ${captionResponse.status})`);
   }
