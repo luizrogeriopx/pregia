@@ -144,6 +144,29 @@ export async function generateSermonAnalysis(
   videoTitle: string,
   preacher: string
 ): Promise<SermonAnalysis> {
+  const userPrompt = `Abaixo está a transcrição bruta extraída do áudio de uma pregação. Extraia apenas o miolo teológico e produza um esboço homilético novo e autêntico.\n\nTRANSCRIÇÃO (use só o conteúdo espiritual/bíblico; ignore vinhetas, saudações, pedidos de like/inscrição, propagandas e menções a canal ou pregador):\n"""\n${transcript.slice(0, 45000)}\n"""`;
+
+  return requestSermonAnalysis(userPrompt, 0.85);
+}
+
+export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
+  return requestSermonAnalysis(
+    [
+      {
+        type: "text",
+        text:
+          "Analise diretamente o conteúdo audiovisual deste vídeo. Use somente aquilo que for falado no áudio, legenda embutida ou transcrição detectável internamente. Ignore completamente título, canal, descrição, comentários, nomes de pessoas, marcas d'água, thumbnails, links e pedidos promocionais. Gere um esboço homilético original, autoral e exclusivo, sem copiar frases literais.",
+      },
+      {
+        type: "video_url",
+        video_url: { url: videoUrl },
+      },
+    ],
+    0.8
+  );
+}
+
+async function requestSermonAnalysis(userContent: string | Array<Record<string, unknown>>, temperature: number): Promise<SermonAnalysis> {
   const apiKey = process.env.LOVABLE_API_KEY;
 
   if (!apiKey) {
@@ -162,8 +185,6 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 6. Em NENHUM campo (theme, summary, introduction, outline, script, slides, social_posts, etc.) cite o autor original, canal ou origem do vídeo. Trate o material como pregação inédita produzida pelo próprio usuário.
 7. Retorne ESTRITAMENTE um JSON válido conforme o schema fornecido pela ferramenta — sem texto antes ou depois.`;
 
-  const userPrompt = `Abaixo está a transcrição bruta extraída do áudio de uma pregação. Extraia apenas o miolo teológico e produza um esboço homilético novo e autêntico.\n\nTRANSCRIÇÃO (use só o conteúdo espiritual/bíblico; ignore vinhetas, saudações, pedidos de like/inscrição, propagandas e menções a canal ou pregador):\n"""\n${transcript.slice(0, 45000)}\n"""`;
-
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -175,7 +196,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          { role: "user", content: userContent },
         ],
         tools: [
           {
@@ -189,6 +210,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
         ],
         tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
         temperature: 0.85,
+        max_tokens: 8192,
       }),
     });
 
