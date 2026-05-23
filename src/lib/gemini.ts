@@ -144,9 +144,10 @@ export async function generateSermonAnalysis(
   videoTitle: string,
   preacher: string
 ): Promise<SermonAnalysis> {
+  const cleanTranscript = sanitizeSourceContent(transcript);
   const userPrompt = `Abaixo está a transcrição bruta extraída do áudio de uma pregação. Extraia apenas o miolo teológico e produza um esboço homilético novo e autêntico.\n\nTRANSCRIÇÃO (use só o conteúdo espiritual/bíblico; ignore vinhetas, saudações, pedidos de like/inscrição, propagandas e menções a canal ou pregador):\n"""\n${transcript.slice(0, 45000)}\n"""`;
 
-  return requestSermonAnalysis(userPrompt, 0.85);
+  return requestSermonAnalysis(userPrompt.replace(transcript.slice(0, 45000), cleanTranscript.slice(0, 45000)), 0.85);
 }
 
 export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
@@ -253,6 +254,18 @@ function toJsonSchema(node: any): any {
     return out;
   }
   return node;
+}
+
+function sanitizeSourceContent(text: string): string {
+  return text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((part) => {
+      const normalized = part.toLowerCase();
+      return !/(\bcanal\b|inscrev|like|sininho|compartilh|coment[aá]rio|descri[cç][aã]o|pastor\s+[a-zà-ÿ]+|pregador\s+[a-zà-ÿ]+|igreja\s+[a-zà-ÿ]+|minist[eé]rio\s+[a-zà-ÿ]+)/i.test(normalized);
+    })
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
