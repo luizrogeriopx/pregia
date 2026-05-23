@@ -10,18 +10,18 @@ import { YoutubeTranscript } from 'youtube-transcript';
 export function extractYoutubeVideoId(url: string): string | null {
   if (!url) return null;
   
-  // Handle watch, short, embed, live, and mobile URLs
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|\/live\/|shorts\/)([^#\&\?]*).*/;
-  const match = url.match(regExp);
+  // Robust regex for various YouTube URL formats (watch, shorts, live, embed, youtu.be)
+  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/live\/)([^"&?\/\s]{11})/i;
+  const match = url.match(regex);
   
-  if (match && match[2].length === 11) {
-    return match[2];
+  if (match && match[1]) {
+    return match[1];
   }
   
-  // Backup simple checks for raw 11-char IDs
-  const cleanUrl = url.trim();
-  if (cleanUrl.length === 11 && !cleanUrl.includes('/') && !cleanUrl.includes('.')) {
-    return cleanUrl;
+  // Fallback for raw 11-char IDs
+  const cleanId = url.trim();
+  if (cleanId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanId)) {
+    return cleanId;
   }
   
   return null;
