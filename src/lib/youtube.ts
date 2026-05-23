@@ -10,18 +10,18 @@ import { YoutubeTranscript } from 'youtube-transcript';
 export function extractYoutubeVideoId(url: string): string | null {
   if (!url) return null;
   
-  // Handle watch, short, embed, live, and mobile URLs
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|\/live\/|shorts\/)([^#\&\?]*).*/;
-  const match = url.match(regExp);
+  // Robust regex for various YouTube URL formats (watch, shorts, live, embed, youtu.be)
+  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/live\/)([^"&?\/\s]{11})/i;
+  const match = url.match(regex);
   
-  if (match && match[2].length === 11) {
-    return match[2];
+  if (match && match[1]) {
+    return match[1];
   }
   
-  // Backup simple checks for raw 11-char IDs
-  const cleanUrl = url.trim();
-  if (cleanUrl.length === 11 && !cleanUrl.includes('/') && !cleanUrl.includes('.')) {
-    return cleanUrl;
+  // Fallback for raw 11-char IDs
+  const cleanId = url.trim();
+  if (cleanId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanId)) {
+    return cleanId;
   }
   
   return null;
@@ -40,43 +40,62 @@ interface YouTubeVideoData {
 export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVideoData> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
-  // 1. Fetch Metadata via oEmbed (Official YouTube endpoint, highly reliable)
+  // 1. Fetch Metadata via oEmbed (Official YouTube endpoint)
   let title = "Vídeo do YouTube";
-  let author = "Pregador Desconhecido";
+  let author = "Pregador";
   
   try {
     const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
-    const res = await fetch(oembedUrl);
+    const res = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+      }
+    });
     if (res.ok) {
       const data = await res.json();
       title = data.title || title;
       author = data.author_name || author;
     }
   } catch (err) {
-    console.error("[YouTube Metadata] Erro ao buscar oEmbed:", err);
-    // Continue anyway, metadata is secondary to the transcript
+    console.error("[YouTube Metadata Error]:", err);
   }
 
-  // 2. Fetch Transcript via specialized library
+  // 2. Fetch Transcript
+  console.log(`[YouTube] Iniciando extração de transcrição para o vídeo: ${videoId}`);
+  
   try {
-    // We try to fetch in Portuguese first, then English, then whatever is available
-    const transcriptData = await YoutubeTranscript.fetchTranscript(watchUrl, {
-      lang: 'pt' 
-    }).catch(async (err) => {
-      // If pt fails, try without language specification to get default
-      console.warn("[YouTube Transcript] Falha ao buscar em PT, tentando padrão:", err.message);
-      return await YoutubeTranscript.fetchTranscript(watchUrl);
-    });
+    // Try multiple strategies
+    let transcriptData;
     
+    try {
+      // Strategy 1: Portuguese (preferred)
+      transcriptData = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'pt' });
+    } catch (ptErr: any) {
+      console.warn(`[YouTube] Falha em PT para ${videoId}, tentando padrão...`);
+      // Strategy 2: Default (whatever is available)
+      transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+    }
+    
+    if (!transcriptData || transcriptData.length === 0) {
+      // Strategy 3: Try mobile URL which sometimes bypasses blocks
+      console.warn(`[YouTube] Tentando URL mobile para ${videoId}...`);
+      transcriptData = await YoutubeTranscript.fetchTranscript(`https://m.youtube.com/watch?v=${videoId}`);
+    }
+
+    if (!transcriptData || transcriptData.length === 0) {
+      throw new Error("No transcript found");
+    }
+
     const transcript = transcriptData
-      .map(t => t.text)
+      .map((t: any) => t.text)
       .join(' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
       .replace(/\s+/g, ' ')
       .trim();
-      
-    if (!transcript) {
-      throw new Error("A transcrição obtida está vazia.");
-    }
 
     return {
       transcript,
@@ -84,18 +103,19 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
       author
     };
   } catch (err: any) {
-    console.error("[YouTube Transcript] Erro fatal:", err);
+    const errorMessage = err?.message || String(err);
+    console.error(`[YouTube Transcript Error] [Video: ${videoId}]:`, errorMessage);
     
-    const errorMessage = err?.message || "";
+    const lowError = errorMessage.toLowerCase();
     
-    if (errorMessage.includes('transcript is disabled') || errorMessage.includes('No transcript found')) {
-      throw new Error("As legendas estão desativadas ou não foram encontradas para este vídeo. Certifique-se de que o vídeo possui transcrição disponível.");
+    if (lowError.includes('transcript is disabled') || lowError.includes('no transcript found')) {
+      throw new Error("As legendas estão desativadas ou não foram encontradas para este vídeo. O PregAI necessita de vídeos com transcrição (mesmo que automática) para gerar o esboço.");
     }
     
-    if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-      throw new Error("O YouTube bloqueou temporariamente o acesso devido ao alto volume de requisições. Por favor, tente novamente em alguns minutos.");
+    if (lowError.includes('captcha') || lowError.includes('too many requests') || lowError.includes('429')) {
+      throw new Error("O YouTube limitou temporariamente o acesso do nosso servidor por excesso de tráfego. Por favor, tente novamente em alguns minutos ou use outro vídeo.");
     }
     
-    throw new Error("Não foi possível extrair a transcrição deste vídeo. Tente um link diferente ou verifique as configurações do vídeo no YouTube.");
+    throw new Error("Não foi possível extrair a transcrição deste vídeo. Verifique se ele é público e se possui legendas disponíveis nas configurações do YouTube.");
   }
 }
