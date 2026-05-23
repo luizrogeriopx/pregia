@@ -40,43 +40,56 @@ interface YouTubeVideoData {
 export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVideoData> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
-  // 1. Fetch Metadata via oEmbed (Official YouTube endpoint, highly reliable)
+  // 1. Fetch Metadata via oEmbed (Official YouTube endpoint)
   let title = "Vídeo do YouTube";
-  let author = "Pregador Desconhecido";
+  let author = "Pregador";
   
   try {
     const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
-    const res = await fetch(oembedUrl);
+    const res = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+      }
+    });
     if (res.ok) {
       const data = await res.json();
       title = data.title || title;
       author = data.author_name || author;
     }
   } catch (err) {
-    console.error("[YouTube Metadata] Erro ao buscar oEmbed:", err);
-    // Continue anyway, metadata is secondary to the transcript
+    console.error("[YouTube Metadata Error]:", err);
   }
 
-  // 2. Fetch Transcript via specialized library
+  // 2. Fetch Transcript
+  console.log(`[YouTube] Iniciando extração de transcrição para o vídeo: ${videoId}`);
+  
   try {
-    // We try to fetch in Portuguese first, then English, then whatever is available
-    const transcriptData = await YoutubeTranscript.fetchTranscript(watchUrl, {
-      lang: 'pt' 
-    }).catch(async (err) => {
-      // If pt fails, try without language specification to get default
-      console.warn("[YouTube Transcript] Falha ao buscar em PT, tentando padrão:", err.message);
-      return await YoutubeTranscript.fetchTranscript(watchUrl);
-    });
+    // Try multiple strategies
+    let transcriptData;
     
+    try {
+      // Strategy 1: Portuguese (preferred)
+      transcriptData = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'pt' });
+    } catch (ptErr: any) {
+      console.warn(`[YouTube] Falha em PT para ${videoId}, tentando padrão...`);
+      // Strategy 2: Default (whatever is available)
+      transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+    }
+    
+    if (!transcriptData || transcriptData.length === 0) {
+      throw new Error("No transcript found");
+    }
+
     const transcript = transcriptData
       .map(t => t.text)
       .join(' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
       .replace(/\s+/g, ' ')
       .trim();
-      
-    if (!transcript) {
-      throw new Error("A transcrição obtida está vazia.");
-    }
 
     return {
       transcript,
@@ -84,20 +97,19 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
       author
     };
   } catch (err: any) {
-    console.error("[YouTube Transcript] Erro fatal:", err);
-    
-    const errorMessage = err?.message || "";
+    const errorMessage = err?.message || String(err);
+    console.error(`[YouTube Transcript Error] [Video: ${videoId}]:`, errorMessage);
     
     const lowError = errorMessage.toLowerCase();
     
     if (lowError.includes('transcript is disabled') || lowError.includes('no transcript found')) {
-      throw new Error("As legendas estão desativadas ou não foram encontradas para este vídeo. O PregAI precisa de vídeos com legendas disponíveis para realizar a análise.");
+      throw new Error("As legendas estão desativadas ou não foram encontradas para este vídeo. O PregAI necessita de vídeos com transcrição (mesmo que automática) para gerar o esboço.");
     }
     
     if (lowError.includes('captcha') || lowError.includes('too many requests') || lowError.includes('429')) {
-      throw new Error("O YouTube limitou o acesso temporariamente devido ao alto volume de pedidos. Por favor, tente novamente em alguns minutos ou com outro vídeo.");
+      throw new Error("O YouTube limitou temporariamente o acesso do nosso servidor por excesso de tráfego. Por favor, tente novamente em alguns minutos ou use outro vídeo.");
     }
     
-    throw new Error("Não foi possível extrair a transcrição. Verifique se o vídeo é público e possui legendas/transcrição ativa nas configurações do YouTube.");
+    throw new Error("Não foi possível extrair a transcrição deste vídeo. Verifique se ele é público e se possui legendas disponíveis nas configurações do YouTube.");
   }
 }
