@@ -151,19 +151,12 @@ export async function generateSermonAnalysis(
 }
 
 export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
-  return requestSermonAnalysis(
-    [
-      {
-        type: "text",
-        text:
-          "Analise diretamente o conteúdo audiovisual deste vídeo. Use somente aquilo que for falado no áudio, legenda embutida ou transcrição detectável internamente. Ignore completamente título, canal, descrição, comentários, nomes de pessoas, marcas d'água, thumbnails, links e pedidos promocionais. Gere um esboço homilético original, autoral e exclusivo, sem copiar frases literais.",
-      },
-      {
-        type: "video_url",
-        video_url: { url: videoUrl },
-      },
-    ],
-    0.8
+  // O Lovable AI Gateway (formato OpenAI) não suporta input de vídeo (video_url/file).
+  // Sem transcrição/legendas, não há conteúdo teológico confiável para gerar um esboço fiel.
+  // Lançamos um erro claro para que o usuário tente outro vídeo com legendas.
+  console.warn(`[Lovable AI] Tentativa de análise direta de vídeo bloqueada (sem transcrição): ${videoUrl}`);
+  throw new Error(
+    "Não foi possível extrair legendas, transcrição ou áudio deste vídeo. Tente um vídeo que tenha legendas ativadas no YouTube (mesmo as automáticas)."
   );
 }
 
