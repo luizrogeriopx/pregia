@@ -114,6 +114,10 @@ function Dashboard() {
     try {
       const res = await generateSermonFn({ data: urlToAnalyze });
       toast.success("Esboço gerado com excelência teológica!");
+      
+      // Refresh local data so it's ready if they come back
+      loadDashboardData();
+
       navigate({
         to: "/dashboard/sermon/$id",
         params: { id: res.id },
