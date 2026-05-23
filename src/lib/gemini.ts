@@ -144,104 +144,103 @@ export async function generateSermonAnalysis(
   videoTitle: string,
   preacher: string
 ): Promise<SermonAnalysis> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.LOVABLE_API_KEY;
 
   if (!apiKey) {
-    console.warn("[Gemini API] GEMINI_API_KEY não configurada no .env. Usando fallback de dados simulados de alta qualidade.");
-    return generateMockAnalysis(videoTitle, preacher);
+    console.warn("[AI] LOVABLE_API_KEY não configurada. Usando fallback simulado.");
+    return generateMockAnalysis();
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição do áudio de uma pregação.
 
-  const prompt = `
-Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã, focado em extração bíblica pura.
-Analise a seguinte transcrição de uma pregação em vídeo e crie uma análise estruturada contendo esboço homilético, slides, postagens sociais, aplicações práticas e roteiro expandido.
+REGRAS ABSOLUTAS E INEGOCIÁVEIS:
+1. NUNCA mencione, cite ou faça referência a: nome do pregador, nome do canal do YouTube, nome da igreja/ministério, nome de outros vídeos, pedidos de inscrição/like/compartilhamento, comentários, descrição do vídeo, links, redes sociais do autor original ou qualquer metadado promocional. Se aparecer na transcrição, IGNORE.
+2. NÃO copie frases literais da transcrição. REINTERPRETE, REESCREVA e REESTRUTURE todo o conteúdo com vocabulário próprio, mantendo somente a essência teológica/bíblica das ideias.
+3. O esboço deve ser AUTORAL: novas frases de impacto, novas aplicações práticas, novos exemplos quando úteis — nunca uma cópia ou paráfrase superficial do vídeo original.
+4. Use somente os versículos bíblicos citados ou claramente aludidos no áudio; se nenhum for citado, escolha passagens canônicas alinhadas ao tema central detectado.
+5. Escreva em português brasileiro claro, reverente, com profundidade teológica acessível.
+6. Em NENHUM campo (theme, summary, introduction, outline, script, slides, social_posts, etc.) cite o autor original, canal ou origem do vídeo. Trate o material como pregação inédita produzida pelo próprio usuário.
+7. Retorne ESTRITAMENTE um JSON válido conforme o schema fornecido pela ferramenta — sem texto antes ou depois.`;
 
-REGRAS CRÍTICAS DE PRIVACIDADE E CONTEÚDO:
-- Baseie-se EXCLUSIVAMENTE no conteúdo teológico e bíblico extraído da transcrição (legenda/áudio).
-- PROIBIÇÃO ABSOLUTA: Não inclua no esboço, resumo ou em qualquer campo gerado o nome do canal do YouTube, o nome de outros vídeos, descrições de "inscreva-se", "deixe seu like", comentários de usuários ou informações promocionais do canal.
-- Ignore qualquer introdução do vídeo que peça engajamento social (likes, inscritos) ou que fale sobre a programação do canal.
-- Foque apenas na mensagem, nos princípios espirituais e nas passagens bíblicas citadas.
-- Reinterprete e adapte as ideias para criar materiais claros e estruturados, sem fazer plágio ou cópia literal, mantendo o tom respeitoso e inspirador.
-
-DADOS PARA ANÁLISE (USE APENAS O CONTEÚDO TEOLÓGICO DISSO):
-Transcrição do Áudio:
-"""
-${transcript.slice(0, 45000)}
-"""
-`;
+  const userPrompt = `Abaixo está a transcrição bruta extraída do áudio de uma pregação. Extraia apenas o miolo teológico e produza um esboço homilético novo e autêntico.\n\nTRANSCRIÇÃO (use só o conteúdo espiritual/bíblico; ignore vinhetas, saudações, pedidos de like/inscrição, propagandas e menções a canal ou pregador):\n"""\n${transcript.slice(0, 45000)}\n"""`;
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }]
-          }
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: SERMON_SCHEMA,
-          temperature: 0.2
-        }
-      })
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "render_sermon_outline",
+              description: "Retorna o esboço homilético estruturado e original.",
+              parameters: toJsonSchema(SERMON_SCHEMA),
+            },
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
+        temperature: 0.85,
+      }),
     });
 
     if (!response.ok) {
       const errBody = await response.text();
-      console.error(`[Gemini API Error] Status: ${response.status}. Body:`, errBody);
-      throw new Error(`Falha na API Gemini: ${response.statusText}`);
+      console.error(`[Lovable AI Error] Status: ${response.status}. Body:`, errBody);
+      if (response.status === 429) throw new Error("Limite de uso da IA atingido. Tente novamente em instantes.");
+      if (response.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
+      throw new Error(`Falha na IA: ${response.statusText}`);
     }
 
     const resJson = await response.json();
-    const generatedText = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!generatedText) {
-      throw new Error("Resposta da IA retornou sem conteúdo.");
+    const toolCall = resJson.choices?.[0]?.message?.tool_calls?.[0];
+    const args = toolCall?.function?.arguments;
+    if (!args) {
+      const fallbackText = resJson.choices?.[0]?.message?.content;
+      if (fallbackText) return JSON.parse(fallbackText) as SermonAnalysis;
+      throw new Error("Resposta da IA sem conteúdo estruturado.");
     }
-
-    return JSON.parse(generatedText.trim()) as SermonAnalysis;
+    return JSON.parse(args) as SermonAnalysis;
   } catch (error) {
-    console.error("[Gemini API Error] Ocorreu um erro ao chamar a IA, usando dados simulados como fallback de segurança:", error);
-    return generateMockAnalysis(videoTitle, preacher);
+    console.error("[Lovable AI Error] Falha ao gerar análise — usando fallback:", error);
+    return generateMockAnalysis();
   }
+}
+
+/**
+ * Converts the Gemini-style UPPERCASE schema into JSON Schema (lowercase) for OpenAI tool calling.
+ */
+function toJsonSchema(node: any): any {
+  if (Array.isArray(node)) return node.map(toJsonSchema);
+  if (node && typeof node === "object") {
+    const out: any = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "type" && typeof v === "string") {
+        out.type = v.toLowerCase();
+      } else {
+        out[k] = toJsonSchema(v);
+      }
+    }
+    return out;
+  }
+  return node;
 }
 
 /**
  * Generates highly contextual mock sermon data to make the app fully usable and realistic.
  */
-function generateMockAnalysis(videoTitle: string, preacher: string): SermonAnalysis {
-  // Infer basic keywords from the video title to customize the mock
-  const titleLower = videoTitle.toLowerCase();
+function generateMockAnalysis(): SermonAnalysis {
   let theme = "Fidelidade e Confiança em Deus";
   let mainVerse = { reference: "Salmos 23:1", text: "O Senhor é o meu pastor, nada me faltará." };
   let topics = ["Fé", "Confiança", "Provisão", "Perseverança"];
-  
-  if (titleLower.includes("graça") || titleLower.includes("graca") || titleLower.includes("salvação") || titleLower.includes("salvacao")) {
-    theme = "A Maravilhosa Graça Redentora";
-    mainVerse = { reference: "Efésios 2:8", text: "Porque pela graça sois salvos, por meio da fé; e isto não vem de vós, é dom de Deus." };
-    topics = ["Graça", "Salvação", "Misericórdia", "Favor Imerecido"];
-  } else if (titleLower.includes("amor") || titleLower.includes("amar")) {
-    theme = "O Amor Incondicional do Pai";
-    mainVerse = { reference: "1 João 4:19", text: "Nós o amamos a ele porque ele nos amou primeiro." };
-    topics = ["Amor", "Paternidade", "Acolhimento", "Comunhão"];
-  } else if (titleLower.includes("provação") || titleLower.includes("provacao") || titleLower.includes("tempestade") || titleLower.includes("deserto") || titleLower.includes("crise")) {
-    theme = "Perseverança em Meio às Provações";
-    mainVerse = { reference: "Tiago 1:2-3", text: "Meus irmãos, tende grande gozo quando cairdes em várias tentações; sabendo que a prova da vossa fé opera a paciência." };
-    topics = ["Perseverança", "Provações", "Esperança", "Fortalecimento"];
-  } else if (titleLower.includes("oração") || titleLower.includes("oracao") || titleLower.includes("orar")) {
-    theme = "O Poder e a Disciplina da Oração";
-    mainVerse = { reference: "Filipeenses 4:6", text: "Não estejais inquietos por coisa alguma; antes as vossas petições sejam em tudo conhecidas diante de Deus pela oração e súplica, com ação de graças." };
-    topics = ["Oração", "Intimidade", "Intercessão", "Poder Espiritual"];
-  } else if (titleLower.includes("propósito") || titleLower.includes("proposito") || titleLower.includes("chamado") || titleLower.includes("vontade")) {
-    theme = "Descobrindo o Chamado e o Propósito de Deus";
-    mainVerse = { reference: "Romanos 12:2", text: "E não vos conformeis com este mundo, mas transformai-vos pela renovação do vosso entendimento, para que experimenteis qual seja a boa, agradável, e perfeita vontade de Deus." };
-    topics = ["Propósito", "Vontade de Deus", "Transformação", "Obediência"];
-  }
 
   const otherVerses = [
     mainVerse,
@@ -252,8 +251,8 @@ function generateMockAnalysis(videoTitle: string, preacher: string): SermonAnaly
   return {
     theme,
     verses: otherVerses,
-    summary: `Esta mensagem baseada na pregação "${videoTitle}" de ${preacher} nos convida a refletir sobre a importância de firmar nossas vidas nos princípios bíblicos. Através de ilustrações práticas e verdades eternas, somos encorajados a dar passos concretos de fé, superando as distrações deste tempo presente para vivermos a plenitude daquilo que Deus planejou para nós.`,
-    introduction: `Hoje entraremos em uma reflexão profunda sobre ${theme}. A mensagem de ${preacher} nos desafia a olhar para além das circunstâncias imediatas e encontrar nossa âncora de segurança nas promessas do Altíssimo. Abriremos a Palavra no texto base de ${mainVerse.reference} para compreendermos como essa verdade se aplica às nossas maiores lutas cotidianas.`,
+    summary: `Esta mensagem nos convida a refletir sobre a importância de firmar nossas vidas nos princípios bíblicos. Através de ilustrações práticas e verdades eternas, somos encorajados a dar passos concretos de fé, superando as distrações deste tempo presente para vivermos a plenitude daquilo que Deus planejou para nós.`,
+    introduction: `Hoje entraremos em uma reflexão profunda sobre ${theme}. A Palavra nos desafia a olhar para além das circunstâncias imediatas e encontrar nossa âncora de segurança nas promessas do Altíssimo. Abriremos a Escritura no texto base de ${mainVerse.reference} para compreendermos como essa verdade se aplica às nossas maiores lutas cotidianas.`,
     outline: [
       {
         title: "1. O Reconhecimento da Provisão Divina",
@@ -297,7 +296,7 @@ function generateMockAnalysis(videoTitle: string, preacher: string): SermonAnaly
       "Obediência parcial ainda é desobediência. A fé exige entrega completa.",
       "O deserto não é o seu destino final; é apenas a sala de aula onde Deus molda o seu caráter."
     ],
-    script: `Queridos irmãos, hoje quero compartilhar com vocês uma mensagem que arde no meu coração sobre "${theme}". Ao assistirmos à pregação de ${preacher}, fica claro que estamos vivendo dias onde somos constantemente bombardeados por preocupações, medos e incertezas. Mas a Escritura nos chama de volta ao centro da vontade do Pai.
+    script: `Queridos irmãos, hoje quero compartilhar com vocês uma mensagem que arde no meu coração sobre "${theme}". Vivemos dias em que somos constantemente bombardeados por preocupações, medos e incertezas. Mas a Escritura nos chama de volta ao centro da vontade do Pai.
 
 No texto de ${mainVerse.reference}, o salmista nos lembra: "${mainVerse.text}". Essa não é apenas uma frase bonita de conforto, é uma declaração de soberania. Se o Senhor é de fato o nosso Pastor, a nossa necessidade de controle deve cessar. Não nos faltará paz, não nos faltará direção, não nos faltará sustento.
 
@@ -305,7 +304,7 @@ O primeiro grande ponto que precisamos entender é o reconhecimento da provisão
 
 Portanto, exorto cada um de vocês a aplicar essa palavra. Não saia daqui da mesma forma que entrou. Entregue suas ansiedades, firme sua fé e caminhe na certeza de que Aquele que começou a boa obra em sua vida é fiel para completá-la. Amém!`,
     title_suggestions: [
-      `Vivendo Sob a Paternidade de Deus (Baseado em ${preacher})`,
+      `Vivendo Sob a Paternidade de Deus`,
       "Quando Nada Mais nos Falta: O Segredo do Contentamento",
       `A Âncora da Fé no Meio da Tempestade — ${theme}`,
       "Dando Passos de Fé na Escuridão"
@@ -319,7 +318,7 @@ Portanto, exorto cada um de vocês a aplicar essa palavra. Não saia daqui da me
       {
         platform: "Instagram",
         type: "Feed Devocional",
-        content: `📖 "${mainVerse.text}" (${mainVerse.reference})\n\nVocê já parou para pensar no impacto dessa frase na sua vida prática?\n\nNa pregação "${videoTitle}" de ${preacher}, somos lembrados de que quando colocamos nossa vida sob a direção de Deus, a ansiedade perde o poder. Ele não promete uma jornada sem desafios, mas garante a Sua presença e cuidado constante.\n\nHoje, entregue suas preocupações Aquele que cuida de você. Que a sua semana seja guiada pela paz que excede todo o entendimento! 🙌✨\n\n#PregAI #Sermao #Fe #Devocional #PalavraDeDeus`
+        content: `📖 "${mainVerse.text}" (${mainVerse.reference})\n\nVocê já parou para pensar no impacto dessa frase na sua vida prática?\n\nQuando colocamos nossa vida sob a direção de Deus, a ansiedade perde o poder. Ele não promete uma jornada sem desafios, mas garante a Sua presença e cuidado constante.\n\nHoje, entregue suas preocupações Àquele que cuida de você. Que a sua semana seja guiada pela paz que excede todo o entendimento! 🙌✨\n\n#PregAI #Sermao #Fe #Devocional #PalavraDeDeus`
       },
       {
         platform: "Reels / Shorts",
@@ -329,9 +328,8 @@ Portanto, exorto cada um de vocês a aplicar essa palavra. Não saia daqui da me
     ],
     slides: [
       {
-        title: `${videoTitle}`,
+        title: `${theme}`,
         content: [
-          `Ministrado por ${preacher}`,
           `Tema Central: ${theme}`,
           `Texto Base: ${mainVerse.reference}`
         ]
