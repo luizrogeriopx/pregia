@@ -82,8 +82,12 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
       transcriptData = await YoutubeTranscript.fetchTranscript(`https://m.youtube.com/watch?v=${videoId}`);
     }
 
+    if (!transcriptData || transcriptData.length === 0) {
+      throw new Error("No transcript found");
+    }
+
     const transcript = transcriptData
-      .map(t => t.text)
+      .map((t: any) => t.text)
       .join(' ')
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
