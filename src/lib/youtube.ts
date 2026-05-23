@@ -88,14 +88,16 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
     
     const errorMessage = err?.message || "";
     
-    if (errorMessage.includes('transcript is disabled') || errorMessage.includes('No transcript found')) {
-      throw new Error("As legendas estão desativadas ou não foram encontradas para este vídeo. Certifique-se de que o vídeo possui transcrição disponível.");
+    const lowError = errorMessage.toLowerCase();
+    
+    if (lowError.includes('transcript is disabled') || lowError.includes('no transcript found')) {
+      throw new Error("As legendas estão desativadas ou não foram encontradas para este vídeo. O PregAI precisa de vídeos com legendas disponíveis para realizar a análise.");
     }
     
-    if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
-      throw new Error("O YouTube bloqueou temporariamente o acesso devido ao alto volume de requisições. Por favor, tente novamente em alguns minutos.");
+    if (lowError.includes('captcha') || lowError.includes('too many requests') || lowError.includes('429')) {
+      throw new Error("O YouTube limitou o acesso temporariamente devido ao alto volume de pedidos. Por favor, tente novamente em alguns minutos ou com outro vídeo.");
     }
     
-    throw new Error("Não foi possível extrair a transcrição deste vídeo. Tente um link diferente ou verifique as configurações do vídeo no YouTube.");
+    throw new Error("Não foi possível extrair a transcrição. Verifique se o vídeo é público e possui legendas/transcrição ativa nas configurações do YouTube.");
   }
 }
