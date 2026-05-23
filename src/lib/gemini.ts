@@ -209,7 +209,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
           },
         ],
         tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
-        temperature: 0.85,
+        temperature,
         max_tokens: 8192,
       }),
     });
