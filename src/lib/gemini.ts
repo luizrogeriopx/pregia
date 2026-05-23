@@ -237,34 +237,10 @@ function toJsonSchema(node: any): any {
 /**
  * Generates highly contextual mock sermon data to make the app fully usable and realistic.
  */
-function generateMockAnalysis(videoTitle: string, preacher: string): SermonAnalysis {
-  // Infer basic keywords from the video title to customize the mock
-  const titleLower = videoTitle.toLowerCase();
+function generateMockAnalysis(): SermonAnalysis {
   let theme = "Fidelidade e Confiança em Deus";
   let mainVerse = { reference: "Salmos 23:1", text: "O Senhor é o meu pastor, nada me faltará." };
   let topics = ["Fé", "Confiança", "Provisão", "Perseverança"];
-  
-  if (titleLower.includes("graça") || titleLower.includes("graca") || titleLower.includes("salvação") || titleLower.includes("salvacao")) {
-    theme = "A Maravilhosa Graça Redentora";
-    mainVerse = { reference: "Efésios 2:8", text: "Porque pela graça sois salvos, por meio da fé; e isto não vem de vós, é dom de Deus." };
-    topics = ["Graça", "Salvação", "Misericórdia", "Favor Imerecido"];
-  } else if (titleLower.includes("amor") || titleLower.includes("amar")) {
-    theme = "O Amor Incondicional do Pai";
-    mainVerse = { reference: "1 João 4:19", text: "Nós o amamos a ele porque ele nos amou primeiro." };
-    topics = ["Amor", "Paternidade", "Acolhimento", "Comunhão"];
-  } else if (titleLower.includes("provação") || titleLower.includes("provacao") || titleLower.includes("tempestade") || titleLower.includes("deserto") || titleLower.includes("crise")) {
-    theme = "Perseverança em Meio às Provações";
-    mainVerse = { reference: "Tiago 1:2-3", text: "Meus irmãos, tende grande gozo quando cairdes em várias tentações; sabendo que a prova da vossa fé opera a paciência." };
-    topics = ["Perseverança", "Provações", "Esperança", "Fortalecimento"];
-  } else if (titleLower.includes("oração") || titleLower.includes("oracao") || titleLower.includes("orar")) {
-    theme = "O Poder e a Disciplina da Oração";
-    mainVerse = { reference: "Filipeenses 4:6", text: "Não estejais inquietos por coisa alguma; antes as vossas petições sejam em tudo conhecidas diante de Deus pela oração e súplica, com ação de graças." };
-    topics = ["Oração", "Intimidade", "Intercessão", "Poder Espiritual"];
-  } else if (titleLower.includes("propósito") || titleLower.includes("proposito") || titleLower.includes("chamado") || titleLower.includes("vontade")) {
-    theme = "Descobrindo o Chamado e o Propósito de Deus";
-    mainVerse = { reference: "Romanos 12:2", text: "E não vos conformeis com este mundo, mas transformai-vos pela renovação do vosso entendimento, para que experimenteis qual seja a boa, agradável, e perfeita vontade de Deus." };
-    topics = ["Propósito", "Vontade de Deus", "Transformação", "Obediência"];
-  }
 
   const otherVerses = [
     mainVerse,
@@ -275,8 +251,8 @@ function generateMockAnalysis(videoTitle: string, preacher: string): SermonAnaly
   return {
     theme,
     verses: otherVerses,
-    summary: `Esta mensagem baseada na pregação "${videoTitle}" de ${preacher} nos convida a refletir sobre a importância de firmar nossas vidas nos princípios bíblicos. Através de ilustrações práticas e verdades eternas, somos encorajados a dar passos concretos de fé, superando as distrações deste tempo presente para vivermos a plenitude daquilo que Deus planejou para nós.`,
-    introduction: `Hoje entraremos em uma reflexão profunda sobre ${theme}. A mensagem de ${preacher} nos desafia a olhar para além das circunstâncias imediatas e encontrar nossa âncora de segurança nas promessas do Altíssimo. Abriremos a Palavra no texto base de ${mainVerse.reference} para compreendermos como essa verdade se aplica às nossas maiores lutas cotidianas.`,
+    summary: `Esta mensagem nos convida a refletir sobre a importância de firmar nossas vidas nos princípios bíblicos. Através de ilustrações práticas e verdades eternas, somos encorajados a dar passos concretos de fé, superando as distrações deste tempo presente para vivermos a plenitude daquilo que Deus planejou para nós.`,
+    introduction: `Hoje entraremos em uma reflexão profunda sobre ${theme}. A Palavra nos desafia a olhar para além das circunstâncias imediatas e encontrar nossa âncora de segurança nas promessas do Altíssimo. Abriremos a Escritura no texto base de ${mainVerse.reference} para compreendermos como essa verdade se aplica às nossas maiores lutas cotidianas.`,
     outline: [
       {
         title: "1. O Reconhecimento da Provisão Divina",
@@ -320,7 +296,7 @@ function generateMockAnalysis(videoTitle: string, preacher: string): SermonAnaly
       "Obediência parcial ainda é desobediência. A fé exige entrega completa.",
       "O deserto não é o seu destino final; é apenas a sala de aula onde Deus molda o seu caráter."
     ],
-    script: `Queridos irmãos, hoje quero compartilhar com vocês uma mensagem que arde no meu coração sobre "${theme}". Ao assistirmos à pregação de ${preacher}, fica claro que estamos vivendo dias onde somos constantemente bombardeados por preocupações, medos e incertezas. Mas a Escritura nos chama de volta ao centro da vontade do Pai.
+    script: `Queridos irmãos, hoje quero compartilhar com vocês uma mensagem que arde no meu coração sobre "${theme}". Vivemos dias em que somos constantemente bombardeados por preocupações, medos e incertezas. Mas a Escritura nos chama de volta ao centro da vontade do Pai.
 
 No texto de ${mainVerse.reference}, o salmista nos lembra: "${mainVerse.text}". Essa não é apenas uma frase bonita de conforto, é uma declaração de soberania. Se o Senhor é de fato o nosso Pastor, a nossa necessidade de controle deve cessar. Não nos faltará paz, não nos faltará direção, não nos faltará sustento.
 
@@ -328,7 +304,7 @@ O primeiro grande ponto que precisamos entender é o reconhecimento da provisão
 
 Portanto, exorto cada um de vocês a aplicar essa palavra. Não saia daqui da mesma forma que entrou. Entregue suas ansiedades, firme sua fé e caminhe na certeza de que Aquele que começou a boa obra em sua vida é fiel para completá-la. Amém!`,
     title_suggestions: [
-      `Vivendo Sob a Paternidade de Deus (Baseado em ${preacher})`,
+      `Vivendo Sob a Paternidade de Deus`,
       "Quando Nada Mais nos Falta: O Segredo do Contentamento",
       `A Âncora da Fé no Meio da Tempestade — ${theme}`,
       "Dando Passos de Fé na Escuridão"
