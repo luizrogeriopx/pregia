@@ -151,7 +151,7 @@ export async function generateSermonAnalysis(
     return generateMockAnalysis(videoTitle, preacher);
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
   const prompt = `
 Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã, focado em extração bíblica pura.
