@@ -134,7 +134,20 @@ function SermonDetail() {
   }
 
   // Safety parse JSON fields if database returns raw objects/arrays
-  const parsedVerses: Versicle[] = Array.isArray(sermon.verses) ? sermon.verses : [];
+  const parsedVerses: Versicle[] = Array.isArray(sermon.verses)
+    ? (sermon.verses as any[])
+        .map((verse: any) => {
+          if (typeof verse === "string") {
+            const reference = verse.trim();
+            return reference ? { reference, text: "Texto bíblico base identificado na pregação." } : null;
+          }
+
+          const reference = verse?.reference ?? verse?.ref ?? verse?.verse ?? verse?.citation ?? verse?.passage ?? "";
+          const text = verse?.text ?? verse?.content ?? verse?.verse_text ?? verse?.biblical_text ?? "Texto bíblico base identificado na pregação.";
+          return reference ? { reference, text } : null;
+        })
+        .filter(Boolean) as Versicle[]
+    : [];
   const parsedOutline: OutlinePoint[] = Array.isArray(sermon.outline)
     ? (sermon.outline as any[]).map((p: any) => ({
         title: p?.title ?? p?.point ?? p?.heading ?? "",
