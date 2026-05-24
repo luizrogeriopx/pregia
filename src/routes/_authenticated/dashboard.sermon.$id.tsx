@@ -213,6 +213,7 @@ function SermonDetail() {
   const downloadSlidesPptx = async () => {
     if (!sermon) return;
     try {
+      const { default: PptxGenJS } = await import("pptxgenjs");
       const pptx = new PptxGenJS();
       pptx.layout = "LAYOUT_16x9";
       pptx.title = sermon.video_title || "Esboço de Pregação";
