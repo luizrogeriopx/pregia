@@ -38,7 +38,7 @@ interface YouTubeVideoData {
   transcript: string;
   title: string;
   author: string;
-  extractionMethod: "library" | "caption-tracks" | "timedtext";
+  extractionMethod: "library" | "innertube" | "caption-tracks" | "timedtext";
 }
 
 /**
@@ -54,6 +54,7 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
   }> = [
     { method: "library", run: () => fetchTranscriptWithLibrary(videoId, "pt") },
     { method: "library", run: () => fetchTranscriptWithLibrary(videoId) },
+    { method: "innertube", run: () => fetchTranscriptFromInnertube(videoId) },
     { method: "caption-tracks", run: () => fetchTranscriptFromCaptionTracks(videoId) },
     { method: "timedtext", run: () => fetchTranscriptFromTimedText(videoId) },
   ];
