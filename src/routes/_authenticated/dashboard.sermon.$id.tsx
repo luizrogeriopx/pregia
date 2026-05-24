@@ -668,23 +668,51 @@ function SermonDetail() {
                   <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed font-mono bg-accent/5 p-3 rounded-lg border border-border/40">
                     {post.content}
                   </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => copyToClipboard(post.content, `social-${pIdx}`)}
-                >
-                  {copiedId === `social-${pIdx}` ? (
-                    <>
-                      <Check className="h-4 w-4 mr-1.5 text-green-400" /> Copiado!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-1.5" /> Copiar Postagem
-                    </>
+                  {postImages[pIdx] && (
+                    <div className="relative rounded-lg overflow-hidden border border-border/40">
+                      <img src={postImages[pIdx]} alt={`Imagem gerada para post ${pIdx + 1}`} className="w-full h-auto" />
+                    </div>
                   )}
-                </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(post.content, `social-${pIdx}`)}
+                  >
+                    {copiedId === `social-${pIdx}` ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1.5 text-green-400" /> Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1.5" /> Copiar
+                      </>
+                    )}
+                  </Button>
+                  {postImages[pIdx] ? (
+                    <Button variant="gold" size="sm" onClick={() => downloadImage(postImages[pIdx], pIdx)}>
+                      <Download className="h-4 w-4 mr-1.5" /> Baixar Imagem
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="gold"
+                      size="sm"
+                      onClick={() => generateImageForPost(pIdx, post)}
+                      disabled={generatingImageIdx === pIdx}
+                    >
+                      {generatingImageIdx === pIdx ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Gerando...
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-4 w-4 mr-1.5" /> Gerar Imagem
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
