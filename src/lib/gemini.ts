@@ -280,7 +280,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 
     const resJson = await response.json();
     const analysis = parseSermonResponse(resJson);
-    if (analysis) return analysis;
+    if (analysis) return await enrichVerseTexts(analysis);
 
     const toolCall = resJson.choices?.[0]?.message?.tool_calls?.[0];
     const args = toolCall?.function?.arguments;
@@ -288,7 +288,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
       console.error("[Lovable AI Error] Resposta sem tool_call nem conteúdo. Payload:", JSON.stringify(resJson).slice(0, 500));
       throw new Error("Resposta da IA sem conteúdo estruturado.");
     }
-    return assertValidSermonAnalysis(JSON.parse(args));
+    return await enrichVerseTexts(assertValidSermonAnalysis(JSON.parse(args)));
   } catch (error: any) {
     if (error?.name === "AbortError") {
       console.error(`[Lovable AI Error] Timeout após ${timeoutMs}ms aguardando a IA.`);
@@ -389,7 +389,7 @@ function normalizeVerses(
     .map((item: any) => {
       if (typeof item === "string") {
         const reference = item.trim();
-        return reference ? { reference, text: "Texto bíblico base identificado na pregação." } : null;
+        return reference ? { reference, text: "" } : null;
       }
 
       if (!item || typeof item !== "object") return null;
@@ -400,7 +400,7 @@ function normalizeVerses(
       );
       const text = ensureString(
         item.text ?? item.content ?? item.verse_text ?? item.biblical_text ?? item.texto_biblico,
-        "Texto bíblico base identificado na pregação."
+        ""
       );
 
       return reference ? { reference, text } : null;
@@ -408,6 +408,42 @@ function normalizeVerses(
     .filter(Boolean) as Array<{ reference: string; text: string }>;
 
   return normalized.length > 0 ? normalized : fallback;
+}
+
+const PLACEHOLDER_VERSE_TEXT = "Texto bíblico base identificado na pregação.";
+
+async function fetchBibleVerse(reference: string): Promise<string | null> {
+  try {
+    const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=almeida`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeout));
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const text = typeof data?.text === "string" ? data.text.replace(/\s+/g, " ").trim() : "";
+    return text.length > 0 ? text : null;
+  } catch (error) {
+    console.warn(`[Bible API] Falha ao buscar "${reference}":`, error);
+    return null;
+  }
+}
+
+async function enrichVerseTexts(analysis: SermonAnalysis): Promise<SermonAnalysis> {
+  if (!Array.isArray(analysis.verses) || analysis.verses.length === 0) return analysis;
+
+  const enriched = await Promise.all(
+    analysis.verses.map(async (v) => {
+      const hasRealText =
+        typeof v.text === "string" &&
+        v.text.trim().length > 0 &&
+        v.text.trim() !== PLACEHOLDER_VERSE_TEXT;
+      if (hasRealText) return v;
+      const fetched = await fetchBibleVerse(v.reference);
+      return { reference: v.reference, text: fetched ?? PLACEHOLDER_VERSE_TEXT };
+    })
+  );
+
+  return { ...analysis, verses: enriched };
 }
 
 function normalizeOutline(
