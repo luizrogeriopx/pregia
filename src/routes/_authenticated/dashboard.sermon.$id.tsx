@@ -729,11 +729,22 @@ function SermonDetail() {
               </h3>
               <div className="space-y-4">
                 {parsedImpactPhrases.map((phrase, idx) => (
-                  <div key={idx} className="flex gap-3 bg-muted/40 p-4 rounded-xl relative overflow-hidden border border-border/60">
+                  <div key={idx} className="flex gap-3 bg-muted/40 p-4 rounded-xl relative overflow-hidden border border-border/60 group">
                     <span className="text-4xl text-gold/20 font-serif leading-none absolute top-2 left-2">“</span>
-                    <p className="text-sm font-medium text-foreground relative z-10 pl-3 leading-relaxed italic">
+                    <p className="text-sm font-medium text-foreground relative z-10 pl-3 pr-9 leading-relaxed italic flex-1">
                       {phrase}
                     </p>
+                    <button
+                      onClick={() => copyToClipboard(phrase, `impact-${idx}`)}
+                      className="absolute top-2 right-2 inline-flex items-center justify-center h-7 w-7 rounded-md bg-card/80 hover:bg-card border border-border text-muted-foreground hover:text-foreground transition-colors"
+                      title="Copiar frase"
+                    >
+                      {copiedId === `impact-${idx}` ? (
+                        <Check className="h-3.5 w-3.5 text-green-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -778,6 +789,75 @@ function SermonDetail() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Title Dialog */}
+      <Dialog open={editTitleOpen} onOpenChange={setEditTitleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renomear pregação</DialogTitle>
+            <DialogDescription>Edite o título do seu esboço.</DialogDescription>
+          </DialogHeader>
+          <Input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} placeholder="Título da pregação" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTitleOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={saveTitle} disabled={saving || !titleDraft.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Description Dialog */}
+      <Dialog open={editDescOpen} onOpenChange={setEditDescOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar descrição</DialogTitle>
+            <DialogDescription>Ajuste a introdução, resumo e conclusão do esboço.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Introdução</label>
+              <Textarea value={introDraft} onChange={(e) => setIntroDraft(e.target.value)} rows={4} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Resumo Executivo</label>
+              <Textarea value={summaryDraft} onChange={(e) => setSummaryDraft(e.target.value)} rows={3} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Conclusão & Apelo</label>
+              <Textarea value={conclusionDraft} onChange={(e) => setConclusionDraft(e.target.value)} rows={4} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDescOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={saveDesc} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Topics Dialog */}
+      <Dialog open={editTopicsOpen} onOpenChange={setEditTopicsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar tópicos relacionados</DialogTitle>
+            <DialogDescription>Separe os tópicos por vírgula.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={topicsDraft}
+            onChange={(e) => setTopicsDraft(e.target.value)}
+            rows={4}
+            placeholder="Ex: fé, salvação, esperança, graça"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTopicsOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={saveTopics} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
