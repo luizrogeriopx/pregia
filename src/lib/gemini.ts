@@ -415,9 +415,7 @@ const PLACEHOLDER_VERSE_TEXT = "Texto bíblico base identificado na pregação."
 async function fetchBibleVerse(reference: string): Promise<string | null> {
   try {
     const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=almeida`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeout));
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const data: any = await res.json();
     const text = typeof data?.text === "string" ? data.text.replace(/\s+/g, " ").trim() : "";
