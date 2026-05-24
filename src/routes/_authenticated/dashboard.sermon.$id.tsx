@@ -37,7 +37,6 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import PptxGenJS from "pptxgenjs";
 
 export const Route = createFileRoute("/_authenticated/dashboard/sermon/$id")({
   head: () => ({ meta: [{ title: "Esboço de Pregação — PregAI" }] }),
