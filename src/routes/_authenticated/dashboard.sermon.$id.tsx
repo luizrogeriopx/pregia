@@ -553,8 +553,16 @@ function SermonDetail() {
 
         {/* 2. SLIDES TAB */}
         <TabsContent value="slides" className="mt-6 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-lg font-bold text-foreground">Esboço de Projeção (Slides)</h3>
+            <div className="flex items-center gap-2">
+            <Button
+              variant="gold"
+              size="sm"
+              onClick={downloadSlidesPptx}
+            >
+              <Download className="h-4 w-4 mr-1.5" /> Baixar .pptx
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -571,10 +579,11 @@ function SermonDetail() {
                 </>
               ) : (
                 <>
-                  <Copy className="h-4 w-4 mr-1.5" /> Copiar Todos os Slides
+                  <Copy className="h-4 w-4 mr-1.5" /> Copiar Texto
                 </>
               )}
             </Button>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
