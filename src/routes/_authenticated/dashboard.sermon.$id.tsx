@@ -360,8 +360,15 @@ function SermonDetail() {
               <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a Dashboard
             </Link>
           </Button>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground leading-tight">
-            {sermon.video_title}
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground leading-tight flex items-center gap-2 flex-wrap">
+            <span>{sermon.video_title}</span>
+            <button
+              onClick={openEditTitle}
+              className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              title="Renomear título"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
           </h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground mt-1">
             <span className="flex items-center gap-1.5">
@@ -427,10 +434,15 @@ function SermonDetail() {
             <div className="md:col-span-2 space-y-6">
               {/* Introduction Card */}
               <div className="bg-card/40 border border-border rounded-2xl p-6 backdrop-blur-sm space-y-3">
-                <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <span className="w-1.5 h-6 rounded-full bg-gold" />
-                  Introdução
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                    <span className="w-1.5 h-6 rounded-full bg-gold" />
+                    Introdução
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={openEditDesc} className="h-7 px-2 text-xs">
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                  </Button>
+                </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {sermon.introduction}
                 </p>
@@ -516,9 +528,14 @@ function SermonDetail() {
 
               {/* Keywords/Topics */}
               <div className="bg-card border border-border rounded-2xl p-6 space-y-3">
-                <h3 className="font-bold text-foreground text-base border-b border-border/40 pb-3">
-                  Tópicos Relacionados
-                </h3>
+                <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                  <h3 className="font-bold text-foreground text-base">
+                    Tópicos Relacionados
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={openEditTopics} className="h-7 px-2 text-xs">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {parsedTopics.map((topic, tIdx) => (
                     <span
