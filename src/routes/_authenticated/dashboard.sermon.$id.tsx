@@ -3,6 +3,18 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useServerFn } from "@tanstack/react-start";
+import { updateSermonFn, generatePostImageFn } from "@/lib/sermons.server";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -19,7 +31,13 @@ import {
   User,
   Heart,
   ChevronRight,
+  Pencil,
+  Download,
+  Image as ImageIcon,
+  Loader2,
+  X,
 } from "lucide-react";
+import PptxGenJS from "pptxgenjs";
 
 export const Route = createFileRoute("/_authenticated/dashboard/sermon/$id")({
   head: () => ({ meta: [{ title: "Esboço de Pregação — PregAI" }] }),
