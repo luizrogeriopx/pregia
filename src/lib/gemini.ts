@@ -151,23 +151,35 @@ export async function generateSermonAnalysis(
 }
 
 export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
-  // O Lovable AI Gateway (formato OpenAI) não suporta input de vídeo (video_url/file).
-  // Sem transcrição/legendas, não há conteúdo teológico confiável para gerar um esboço fiel.
-  // Lançamos um erro claro para que o usuário tente outro vídeo com legendas.
-  console.warn(`[Lovable AI] Tentativa de análise direta de vídeo bloqueada (sem transcrição): ${videoUrl}`);
-  throw new Error(
-    "Não foi possível extrair legendas, transcrição ou áudio deste vídeo. Tente um vídeo que tenha legendas ativadas no YouTube (mesmo as automáticas)."
-  );
+  const userPrompt = [
+    {
+      type: "text",
+      text: `Analise diretamente o áudio/conteúdo falado deste vídeo público do YouTube e gere um esboço homilético original.
+
+Use somente o conteúdo espiritual, bíblico e teológico falado no vídeo. Ignore totalmente título, canal, descrição, comentários, nomes próprios, vinhetas, pedidos de like/inscrição e qualquer dado promocional. Não copie frases literais; reconstrua a mensagem com linguagem nova, autoral e exclusiva.`,
+    },
+    {
+      type: "video_url",
+      video_url: { url: videoUrl },
+    },
+  ];
+
+  console.log(`[Lovable AI] Analisando vídeo diretamente via conteúdo audiovisual: ${videoUrl}`);
+  return requestSermonAnalysis(userPrompt, 0.8, 115000);
 }
 
-async function requestSermonAnalysis(userContent: string | Array<Record<string, unknown>>, temperature: number): Promise<SermonAnalysis> {
+async function requestSermonAnalysis(
+  userContent: string | Array<Record<string, unknown>>,
+  temperature: number,
+  timeoutMs = 55000
+): Promise<SermonAnalysis> {
   const apiKey = process.env.LOVABLE_API_KEY;
 
   if (!apiKey) {
     throw new Error("Serviço de IA indisponível no momento.");
   }
 
-  const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição do áudio de uma pregação.
+  const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição, áudio ou vídeo de uma pregação.
 
 REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 1. NUNCA mencione, cite ou faça referência a: nome do pregador, nome do canal do YouTube, nome da igreja/ministério, nome de outros vídeos, pedidos de inscrição/like/compartilhamento, comentários, descrição do vídeo, links, redes sociais do autor original ou qualquer metadado promocional. Se aparecer na transcrição, IGNORE.
@@ -180,7 +192,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     console.log(`[Lovable AI] Iniciando requisição (temperature=${temperature}, contentType=${typeof userContent === "string" ? "text" : "multimodal"})`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -234,8 +246,8 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     return JSON.parse(args) as SermonAnalysis;
   } catch (error: any) {
     if (error?.name === "AbortError") {
-      console.error("[Lovable AI Error] Timeout após 55s aguardando a IA.");
-      throw new Error("A IA demorou demais para responder. Tente novamente com um vídeo mais curto ou que tenha legendas disponíveis.");
+      console.error(`[Lovable AI Error] Timeout após ${timeoutMs}ms aguardando a IA.`);
+      throw new Error("A IA demorou demais para responder. Tente novamente com um vídeo mais curto ou aguarde alguns instantes antes de tentar de novo.");
     }
     console.error("[Lovable AI Error] Falha ao gerar análise:", error);
     throw error;
