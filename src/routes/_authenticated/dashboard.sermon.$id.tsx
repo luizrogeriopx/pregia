@@ -3,6 +3,18 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useServerFn } from "@tanstack/react-start";
+import { updateSermonFn, generatePostImageFn } from "@/lib/sermons.server";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -19,7 +31,13 @@ import {
   User,
   Heart,
   ChevronRight,
+  Pencil,
+  Download,
+  Image as ImageIcon,
+  Loader2,
+  X,
 } from "lucide-react";
+import PptxGenJS from "pptxgenjs";
 
 export const Route = createFileRoute("/_authenticated/dashboard/sermon/$id")({
   head: () => ({ meta: [{ title: "Esboço de Pregação — PregAI" }] }),
@@ -109,6 +127,158 @@ function SermonDetail() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // ---- Edit state ----
+  const updateSermon = useServerFn(updateSermonFn);
+  const generatePostImage = useServerFn(generatePostImageFn);
+  const [editTitleOpen, setEditTitleOpen] = useState(false);
+  const [editDescOpen, setEditDescOpen] = useState(false);
+  const [editTopicsOpen, setEditTopicsOpen] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [introDraft, setIntroDraft] = useState("");
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [conclusionDraft, setConclusionDraft] = useState("");
+  const [topicsDraft, setTopicsDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // ---- Post image state ----
+  const [postImages, setPostImages] = useState<Record<number, string>>({});
+  const [generatingImageIdx, setGeneratingImageIdx] = useState<number | null>(null);
+
+  const openEditTitle = () => {
+    if (!sermon) return;
+    setTitleDraft(sermon.video_title || "");
+    setEditTitleOpen(true);
+  };
+  const openEditDesc = () => {
+    if (!sermon) return;
+    setIntroDraft(sermon.introduction || "");
+    setSummaryDraft(sermon.summary || "");
+    setConclusionDraft(sermon.conclusion || "");
+    setEditDescOpen(true);
+  };
+  const openEditTopics = () => {
+    if (!sermon) return;
+    const t = Array.isArray(sermon.topics) ? sermon.topics : [];
+    setTopicsDraft(t.join(", "));
+    setEditTopicsOpen(true);
+  };
+
+  const saveTitle = async () => {
+    if (!sermon) return;
+    setSaving(true);
+    try {
+      await updateSermon({ data: { id: sermon.id, video_title: titleDraft } });
+      setSermon({ ...sermon, video_title: titleDraft });
+      toast.success("Título atualizado!");
+      setEditTitleOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar título.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveDesc = async () => {
+    if (!sermon) return;
+    setSaving(true);
+    try {
+      await updateSermon({
+        data: { id: sermon.id, introduction: introDraft, summary: summaryDraft, conclusion: conclusionDraft },
+      });
+      setSermon({ ...sermon, introduction: introDraft, summary: summaryDraft, conclusion: conclusionDraft });
+      toast.success("Descrição atualizada!");
+      setEditDescOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar descrição.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTopics = async () => {
+    if (!sermon) return;
+    setSaving(true);
+    try {
+      const topics = topicsDraft.split(",").map((t) => t.trim()).filter(Boolean);
+      await updateSermon({ data: { id: sermon.id, topics } });
+      setSermon({ ...sermon, topics });
+      toast.success("Tópicos atualizados!");
+      setEditTopicsOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar tópicos.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const downloadSlidesPptx = async () => {
+    if (!sermon) return;
+    try {
+      const pptx = new PptxGenJS();
+      pptx.layout = "LAYOUT_16x9";
+      pptx.title = sermon.video_title || "Esboço de Pregação";
+      const slides = parsedSlidesData();
+      slides.forEach((slide, idx) => {
+        const s = pptx.addSlide();
+        s.background = { color: "030712" };
+        s.addText(`SLIDE ${idx + 1}`, {
+          x: 0.4, y: 0.3, w: 9, h: 0.3,
+          fontSize: 10, color: "D4AF37", bold: true, fontFace: "Arial",
+        });
+        s.addText(slide.title || "", {
+          x: 0.4, y: 0.65, w: 9, h: 1.1,
+          fontSize: 32, bold: true, color: "F1F5F9", fontFace: "Arial",
+        });
+        const bullets = (slide.content || []).map((c) => ({ text: c, options: { bullet: { code: "25CF" }, color: "CBD5E1" } }));
+        if (bullets.length) {
+          s.addText(bullets as any, {
+            x: 0.6, y: 1.9, w: 8.8, h: 3.2,
+            fontSize: 18, fontFace: "Arial", paraSpaceAfter: 8,
+          });
+        }
+        s.addText(`PregAI  •  ${sermon.preacher_name || ""}`, {
+          x: 0.4, y: 5.1, w: 9, h: 0.3,
+          fontSize: 10, color: "64748B", fontFace: "Arial",
+        });
+      });
+      await pptx.writeFile({ fileName: `${(sermon.video_title || "esboco").slice(0, 60)}.pptx` });
+      toast.success("Apresentação .pptx baixada!");
+    } catch (e: any) {
+      console.error(e);
+      toast.error("Erro ao gerar arquivo .pptx");
+    }
+  };
+
+  const parsedSlidesData = (): Slide[] => {
+    if (!sermon) return [];
+    return Array.isArray(sermon.slides)
+      ? (sermon.slides as any[]).map((s: any) => ({
+          title: s?.title ?? s?.heading ?? "",
+          content: Array.isArray(s?.content) ? s.content : Array.isArray(s?.bullets) ? s.bullets : Array.isArray(s?.points) ? s.points : [],
+        }))
+      : [];
+  };
+
+  const generateImageForPost = async (idx: number, post: SocialPost) => {
+    setGeneratingImageIdx(idx);
+    try {
+      const { imageUrl } = await generatePostImage({ data: { content: post.content, platform: post.platform } });
+      setPostImages((prev) => ({ ...prev, [idx]: imageUrl }));
+      toast.success("Imagem gerada!");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao gerar imagem.");
+    } finally {
+      setGeneratingImageIdx(null);
+    }
+  };
+
+  const downloadImage = (dataUrl: string, idx: number) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `post-${idx + 1}.png`;
+    a.click();
+  };
+
   if (loading) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
@@ -190,8 +360,15 @@ function SermonDetail() {
               <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a Dashboard
             </Link>
           </Button>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground leading-tight">
-            {sermon.video_title}
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground leading-tight flex items-center gap-2 flex-wrap">
+            <span>{sermon.video_title}</span>
+            <button
+              onClick={openEditTitle}
+              className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              title="Renomear título"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
           </h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground mt-1">
             <span className="flex items-center gap-1.5">
@@ -257,10 +434,15 @@ function SermonDetail() {
             <div className="md:col-span-2 space-y-6">
               {/* Introduction Card */}
               <div className="bg-card/40 border border-border rounded-2xl p-6 backdrop-blur-sm space-y-3">
-                <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <span className="w-1.5 h-6 rounded-full bg-gold" />
-                  Introdução
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                    <span className="w-1.5 h-6 rounded-full bg-gold" />
+                    Introdução
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={openEditDesc} className="h-7 px-2 text-xs">
+                    <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                  </Button>
+                </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {sermon.introduction}
                 </p>
@@ -346,9 +528,14 @@ function SermonDetail() {
 
               {/* Keywords/Topics */}
               <div className="bg-card border border-border rounded-2xl p-6 space-y-3">
-                <h3 className="font-bold text-foreground text-base border-b border-border/40 pb-3">
-                  Tópicos Relacionados
-                </h3>
+                <div className="flex items-center justify-between border-b border-border/40 pb-3">
+                  <h3 className="font-bold text-foreground text-base">
+                    Tópicos Relacionados
+                  </h3>
+                  <Button variant="ghost" size="sm" onClick={openEditTopics} className="h-7 px-2 text-xs">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {parsedTopics.map((topic, tIdx) => (
                     <span
@@ -366,8 +553,16 @@ function SermonDetail() {
 
         {/* 2. SLIDES TAB */}
         <TabsContent value="slides" className="mt-6 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-lg font-bold text-foreground">Esboço de Projeção (Slides)</h3>
+            <div className="flex items-center gap-2">
+            <Button
+              variant="gold"
+              size="sm"
+              onClick={downloadSlidesPptx}
+            >
+              <Download className="h-4 w-4 mr-1.5" /> Baixar .pptx
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -384,10 +579,11 @@ function SermonDetail() {
                 </>
               ) : (
                 <>
-                  <Copy className="h-4 w-4 mr-1.5" /> Copiar Todos os Slides
+                  <Copy className="h-4 w-4 mr-1.5" /> Copiar Texto
                 </>
               )}
             </Button>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
@@ -472,23 +668,51 @@ function SermonDetail() {
                   <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed font-mono bg-accent/5 p-3 rounded-lg border border-border/40">
                     {post.content}
                   </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => copyToClipboard(post.content, `social-${pIdx}`)}
-                >
-                  {copiedId === `social-${pIdx}` ? (
-                    <>
-                      <Check className="h-4 w-4 mr-1.5 text-green-400" /> Copiado!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-1.5" /> Copiar Postagem
-                    </>
+                  {postImages[pIdx] && (
+                    <div className="relative rounded-lg overflow-hidden border border-border/40">
+                      <img src={postImages[pIdx]} alt={`Imagem gerada para post ${pIdx + 1}`} className="w-full h-auto" />
+                    </div>
                   )}
-                </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(post.content, `social-${pIdx}`)}
+                  >
+                    {copiedId === `social-${pIdx}` ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1.5 text-green-400" /> Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1.5" /> Copiar
+                      </>
+                    )}
+                  </Button>
+                  {postImages[pIdx] ? (
+                    <Button variant="gold" size="sm" onClick={() => downloadImage(postImages[pIdx], pIdx)}>
+                      <Download className="h-4 w-4 mr-1.5" /> Baixar Imagem
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="gold"
+                      size="sm"
+                      onClick={() => generateImageForPost(pIdx, post)}
+                      disabled={generatingImageIdx === pIdx}
+                    >
+                      {generatingImageIdx === pIdx ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Gerando...
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="h-4 w-4 mr-1.5" /> Gerar Imagem
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -505,11 +729,22 @@ function SermonDetail() {
               </h3>
               <div className="space-y-4">
                 {parsedImpactPhrases.map((phrase, idx) => (
-                  <div key={idx} className="flex gap-3 bg-muted/40 p-4 rounded-xl relative overflow-hidden border border-border/60">
+                  <div key={idx} className="flex gap-3 bg-muted/40 p-4 rounded-xl relative overflow-hidden border border-border/60 group">
                     <span className="text-4xl text-gold/20 font-serif leading-none absolute top-2 left-2">“</span>
-                    <p className="text-sm font-medium text-foreground relative z-10 pl-3 leading-relaxed italic">
+                    <p className="text-sm font-medium text-foreground relative z-10 pl-3 pr-9 leading-relaxed italic flex-1">
                       {phrase}
                     </p>
+                    <button
+                      onClick={() => copyToClipboard(phrase, `impact-${idx}`)}
+                      className="absolute top-2 right-2 inline-flex items-center justify-center h-7 w-7 rounded-md bg-card/80 hover:bg-card border border-border text-muted-foreground hover:text-foreground transition-colors"
+                      title="Copiar frase"
+                    >
+                      {copiedId === `impact-${idx}` ? (
+                        <Check className="h-3.5 w-3.5 text-green-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -554,6 +789,75 @@ function SermonDetail() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Title Dialog */}
+      <Dialog open={editTitleOpen} onOpenChange={setEditTitleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renomear pregação</DialogTitle>
+            <DialogDescription>Edite o título do seu esboço.</DialogDescription>
+          </DialogHeader>
+          <Input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} placeholder="Título da pregação" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTitleOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={saveTitle} disabled={saving || !titleDraft.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Description Dialog */}
+      <Dialog open={editDescOpen} onOpenChange={setEditDescOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar descrição</DialogTitle>
+            <DialogDescription>Ajuste a introdução, resumo e conclusão do esboço.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Introdução</label>
+              <Textarea value={introDraft} onChange={(e) => setIntroDraft(e.target.value)} rows={4} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Resumo Executivo</label>
+              <Textarea value={summaryDraft} onChange={(e) => setSummaryDraft(e.target.value)} rows={3} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Conclusão & Apelo</label>
+              <Textarea value={conclusionDraft} onChange={(e) => setConclusionDraft(e.target.value)} rows={4} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDescOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={saveDesc} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Topics Dialog */}
+      <Dialog open={editTopicsOpen} onOpenChange={setEditTopicsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar tópicos relacionados</DialogTitle>
+            <DialogDescription>Separe os tópicos por vírgula.</DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={topicsDraft}
+            onChange={(e) => setTopicsDraft(e.target.value)}
+            rows={4}
+            placeholder="Ex: fé, salvação, esperança, graça"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTopicsOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={saveTopics} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
