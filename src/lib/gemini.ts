@@ -355,7 +355,7 @@ function assertValidSermonAnalysis(value: any): SermonAnalysis {
     verses: ensureArray(value.verses, fallback.verses),
     summary: ensureString(value.summary, fallback.summary),
     introduction: ensureString(value.introduction, fallback.introduction),
-    outline: ensureArray(value.outline, fallback.outline),
+    outline: normalizeOutline(value.outline, fallback.outline),
     topics: ensureArray(value.topics, fallback.topics),
     conclusion: ensureString(value.conclusion, fallback.conclusion),
     applications: ensureArray(value.applications, fallback.applications),
@@ -364,7 +364,7 @@ function assertValidSermonAnalysis(value: any): SermonAnalysis {
     title_suggestions: ensureArray(value.title_suggestions, fallback.title_suggestions),
     related_themes: ensureArray(value.related_themes, fallback.related_themes),
     social_posts: ensureArray(value.social_posts, fallback.social_posts),
-    slides: ensureArray(value.slides, fallback.slides),
+    slides: normalizeSlides(value.slides, fallback.slides),
   };
 }
 
@@ -374,6 +374,80 @@ function ensureString(value: unknown, fallback: string): string {
 
 function ensureArray<T>(value: unknown, fallback: T[]): T[] {
   return Array.isArray(value) && value.length > 0 ? (value as T[]) : fallback;
+}
+
+function normalizeOutline(
+  value: unknown,
+  fallback: Array<{ title: string; subpoints: string[]; keyVerse?: string }>
+): Array<{ title: string; subpoints: string[]; keyVerse?: string }> {
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+  const normalized = value
+    .map((item: any) => {
+      if (!item || typeof item !== "object") return null;
+      const title =
+        typeof item.title === "string" && item.title.trim()
+          ? item.title.trim()
+          : typeof item.point === "string" && item.point.trim()
+            ? item.point.trim()
+            : typeof item.heading === "string" && item.heading.trim()
+              ? item.heading.trim()
+              : "";
+      const rawSubs = Array.isArray(item.subpoints)
+        ? item.subpoints
+        : Array.isArray(item.sub_points)
+          ? item.sub_points
+          : Array.isArray(item.points)
+            ? item.points
+            : [];
+      const subpoints = rawSubs
+        .map((s: any) => (typeof s === "string" ? s : s?.text ?? s?.content ?? ""))
+        .filter((s: string) => typeof s === "string" && s.trim().length > 0);
+      const keyVerse =
+        typeof item.keyVerse === "string"
+          ? item.keyVerse
+          : typeof item.key_verse === "string"
+            ? item.key_verse
+            : typeof item.verse === "string"
+              ? item.verse
+              : undefined;
+      if (!title) return null;
+      return { title, subpoints, ...(keyVerse ? { keyVerse } : {}) };
+    })
+    .filter(Boolean) as Array<{ title: string; subpoints: string[]; keyVerse?: string }>;
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function normalizeSlides(
+  value: unknown,
+  fallback: Array<{ title: string; content: string[] }>
+): Array<{ title: string; content: string[] }> {
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+  const normalized = value
+    .map((item: any) => {
+      if (!item || typeof item !== "object") return null;
+      const title =
+        typeof item.title === "string" && item.title.trim()
+          ? item.title.trim()
+          : typeof item.heading === "string"
+            ? item.heading.trim()
+            : "";
+      const rawContent = Array.isArray(item.content)
+        ? item.content
+        : Array.isArray(item.bullets)
+          ? item.bullets
+          : Array.isArray(item.points)
+            ? item.points
+            : typeof item.content === "string"
+              ? [item.content]
+              : [];
+      const content = rawContent
+        .map((c: any) => (typeof c === "string" ? c : c?.text ?? ""))
+        .filter((c: string) => typeof c === "string" && c.trim().length > 0);
+      if (!title) return null;
+      return { title, content };
+    })
+    .filter(Boolean) as Array<{ title: string; content: string[] }>;
+  return normalized.length > 0 ? normalized : fallback;
 }
 
 function sanitizeSourceContent(text: string): string {
