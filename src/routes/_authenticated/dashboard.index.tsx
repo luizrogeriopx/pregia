@@ -21,7 +21,8 @@ export const Route = createFileRoute("/_authenticated/dashboard/")({
 const LOADING_STEPS = [
   "Lendo o link do YouTube...",
   "Conectando ao vídeo e buscando metadados...",
-  "Extraindo transcrição e legenda do áudio...",
+  "Buscando legenda, transcrição ou extraindo áudio...",
+  "Transcrevendo o áudio quando não houver legenda...",
   "Lovable AI analisando estrutura teológica...",
   "Gerando esboço homilético detalhado...",
   "Criando slides de apresentação...",

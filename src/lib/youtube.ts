@@ -1,4 +1,5 @@
 import { YoutubeTranscript } from "youtube-transcript";
+import { Innertube, Log } from "youtubei.js";
 
 /**
  * Utility functions to extract YouTube video content without relying on title,
@@ -40,6 +41,16 @@ interface YouTubeVideoData {
   author: string;
   extractionMethod: "library" | "innertube" | "caption-tracks" | "timedtext";
 }
+
+export interface YouTubeAudioData {
+  audioBase64: string;
+  mimeType: string;
+  durationSeconds: number | null;
+  contentLength: number | null;
+  truncated: boolean;
+}
+
+const MAX_AUDIO_BYTES = 24 * 1024 * 1024;
 
 /**
  * Fetches captions/transcripts using multiple strategies. The returned title and
@@ -84,6 +95,57 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
   throw new Error(
     `Não foi possível extrair legendas/transcrição por métodos diretos. Tentaremos analisar o conteúdo audiovisual com IA. Detalhes técnicos: ${errors.join(" | ")}`
   );
+}
+
+export async function fetchYoutubeAudioForTranscription(videoId: string): Promise<YouTubeAudioData> {
+  console.log(`[YouTube] Tentando extrair fluxo de áudio para STT: ${videoId}`);
+  Log.setLevel(Log.Level.NONE);
+
+  const innertube = await withTimeout(
+    () => Innertube.create({ lang: "pt-BR", location: "BR", retrieve_player: false }),
+    12000
+  );
+  const info: any = await withTimeout(() => innertube.getBasicInfo(videoId, { client: "IOS" }), 15000);
+  const formats = info?.streaming_data?.adaptive_formats || [];
+  const audioFormats = formats
+    .filter((format: any) => format?.has_audio && !format?.has_video && format?.url)
+    .sort((a: any, b: any) => Number(a.content_length || Infinity) - Number(b.content_length || Infinity));
+
+  const selected = audioFormats.find((format: any) => String(format.mime_type || "").includes("mp4")) || audioFormats[0];
+  if (!selected?.url) {
+    throw new Error("Não foi possível localizar um fluxo de áudio público para este vídeo.");
+  }
+
+  const contentLength = Number(selected.content_length || 0) || null;
+  const truncated = !!contentLength && contentLength > MAX_AUDIO_BYTES;
+  const response = await withTimeout(
+    () =>
+      fetch(selected.url, {
+        headers: {
+          ...WATCH_HEADERS,
+          Range: `bytes=0-${Math.min((contentLength || MAX_AUDIO_BYTES) - 1, MAX_AUDIO_BYTES - 1)}`,
+        },
+      }),
+    30000
+  );
+
+  if (!response.ok && response.status !== 206) {
+    throw new Error(`Falha ao baixar áudio do YouTube: HTTP ${response.status}`);
+  }
+
+  const audioBuffer = await response.arrayBuffer();
+  if (audioBuffer.byteLength < 1024) {
+    throw new Error("O áudio extraído está vazio ou inválido.");
+  }
+
+  console.log(`[YouTube] Áudio extraído (${audioBuffer.byteLength} bytes, mime=${selected.mime_type}).`);
+  return {
+    audioBase64: arrayBufferToBase64(audioBuffer),
+    mimeType: String(selected.mime_type || response.headers.get("content-type") || "audio/mp4").split(";")[0],
+    durationSeconds: selected.approx_duration_ms ? Math.round(Number(selected.approx_duration_ms) / 1000) : null,
+    contentLength,
+    truncated,
+  };
 }
 
 async function fetchTranscriptWithLibrary(videoId: string, lang?: string): Promise<string> {
@@ -334,4 +396,14 @@ async function withTimeout<T>(operation: () => Promise<T>, timeoutMs: number): P
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
 }

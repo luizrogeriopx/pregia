@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { extractYoutubeVideoId, fetchYoutubeTranscript } from "./youtube";
-import { generateSermonAnalysis, generateSermonAnalysisFromVideo } from "./gemini";
+import { extractYoutubeVideoId, fetchYoutubeAudioForTranscription, fetchYoutubeTranscript } from "./youtube";
+import { generateSermonAnalysis, generateSermonAnalysisFromAudio } from "./gemini";
 
 /**
  * Server Function to analyze a YouTube video URL and generate a sermon outline.
@@ -69,20 +69,23 @@ export const generateSermonFn = createServerFn({ method: "POST" })
       transcriptAvailable = true;
       console.log(`[Sermon] Transcrição obtida (${ytData.transcript.length} chars).`);
     } catch (error: any) {
-      console.warn("[YouTube Scraping Warning] Transcrição indisponível; usando análise audiovisual direta:", error);
+      console.warn("[YouTube Scraping Warning] Transcrição indisponível; extraindo áudio para Speech-to-Text:", error);
     }
 
-    // 4. Generate AI Sermon Analysis from transcript or directly from the video/audio.
+    // 4. Generate AI Sermon Analysis from transcript, or extract audio and run Speech-to-Text first.
     let aiAnalysis;
     try {
-      console.log(`[Sermon] Iniciando geração via IA (modo=${transcriptAvailable ? "transcrição" : "vídeo"}).`);
-      aiAnalysis = transcriptAvailable
-        ? await generateSermonAnalysis(ytData.transcript, ytData.title, ytData.author)
-        : await generateSermonAnalysisFromVideo(`https://www.youtube.com/watch?v=${videoId}`);
+      console.log(`[Sermon] Iniciando geração via IA (modo=${transcriptAvailable ? "transcrição" : "áudio-stt"}).`);
+      if (transcriptAvailable) {
+        aiAnalysis = await generateSermonAnalysis(ytData.transcript, ytData.title, ytData.author);
+      } else {
+        const audio = await fetchYoutubeAudioForTranscription(videoId);
+        aiAnalysis = await generateSermonAnalysisFromAudio(audio.audioBase64, audio.mimeType);
+      }
       console.log(`[Sermon] Análise concluída pela IA.`);
     } catch (error: any) {
       console.error("[Gemini AI Error] Falha ao gerar análise:", error);
-      throw new Error(error?.message || "Erro ao gerar a análise de inteligência artificial da pregação. Nenhum crédito de esboço foi consumido porque o material não foi salvo.");
+      throw new Error(error?.message || "Erro ao gerar a análise da pregação. Nenhum crédito de esboço foi consumido porque o material não foi salvo.");
     }
 
     // 5. Save Sermon to Supabase Database

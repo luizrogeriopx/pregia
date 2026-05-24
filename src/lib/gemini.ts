@@ -151,21 +151,60 @@ export async function generateSermonAnalysis(
 }
 
 export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
-  const userPrompt = [
-    {
-      type: "text",
-      text: `Analise diretamente o áudio/conteúdo falado deste vídeo público do YouTube e gere um esboço homilético original.
+  console.warn(`[Lovable AI] Tentativa de análise direta de vídeo bloqueada (sem áudio extraído): ${videoUrl}`);
+  throw new Error("Não foi possível extrair o áudio deste vídeo para transcrição.");
+}
 
-Use somente o conteúdo espiritual, bíblico e teológico falado no vídeo. Ignore totalmente título, canal, descrição, comentários, nomes próprios, vinhetas, pedidos de like/inscrição e qualquer dado promocional. Não copie frases literais; reconstrua a mensagem com linguagem nova, autoral e exclusiva.`,
-    },
-    {
-      type: "video_url",
-      video_url: { url: videoUrl },
-    },
-  ];
+export async function generateSermonAnalysisFromAudio(audioBase64: string, mimeType: string): Promise<SermonAnalysis> {
+  const transcript = await transcribeAudioContent(audioBase64, mimeType);
+  return generateSermonAnalysis(transcript, "Esboço gerado do conteúdo do áudio", "Conteúdo audiovisual");
+}
 
-  console.log(`[Lovable AI] Analisando vídeo diretamente via conteúdo audiovisual: ${videoUrl}`);
-  return requestSermonAnalysis(userPrompt, 0.8, 115000);
+async function transcribeAudioContent(audioBase64: string, mimeType: string): Promise<string> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey) throw new Error("Serviço de IA indisponível no momento.");
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Transcreva fielmente somente a fala humana deste áudio em português brasileiro. Ignore música, vinhetas, nomes de canal, pedidos de inscrição/like e comentários promocionais. Retorne apenas a transcrição limpa, sem resumo.",
+            },
+            {
+              type: "file",
+              file: {
+                filename: mimeType.includes("webm") ? "audio.webm" : "audio.mp4",
+                file_data: `data:${mimeType};base64,${audioBase64}`,
+              },
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      max_tokens: 8192,
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    console.error(`[Lovable AI STT Error] Status: ${response.status}. Body:`, errBody);
+    throw new Error("Falha ao transcrever o áudio do vídeo.");
+  }
+
+  const resJson = await response.json();
+  const transcript = sanitizeSourceContent(String(resJson?.choices?.[0]?.message?.content || ""));
+  if (transcript.length < 80) {
+    throw new Error("A IA não encontrou fala suficiente no áudio extraído para gerar um esboço confiável.");
+  }
+  console.log(`[Lovable AI STT] Transcrição gerada a partir do áudio (${transcript.length} chars).`);
+  return transcript;
 }
 
 async function requestSermonAnalysis(
