@@ -135,14 +135,37 @@ function SermonDetail() {
 
   // Safety parse JSON fields if database returns raw objects/arrays
   const parsedVerses: Versicle[] = Array.isArray(sermon.verses) ? sermon.verses : [];
-  const parsedOutline: OutlinePoint[] = Array.isArray(sermon.outline) ? sermon.outline : [];
+  const parsedOutline: OutlinePoint[] = Array.isArray(sermon.outline)
+    ? (sermon.outline as any[]).map((p: any) => ({
+        title: p?.title ?? p?.point ?? p?.heading ?? "",
+        subpoints: Array.isArray(p?.subpoints)
+          ? p.subpoints
+          : Array.isArray(p?.sub_points)
+            ? p.sub_points
+            : Array.isArray(p?.points)
+              ? p.points
+              : [],
+        keyVerse: p?.keyVerse ?? p?.key_verse ?? p?.verse,
+      }))
+    : [];
   const parsedTopics: string[] = Array.isArray(sermon.topics) ? sermon.topics : [];
   const parsedApplications: string[] = Array.isArray(sermon.applications) ? sermon.applications : [];
   const parsedImpactPhrases: string[] = Array.isArray(sermon.impact_phrases) ? sermon.impact_phrases : [];
   const parsedTitleSuggestions: string[] = Array.isArray(sermon.title_suggestions) ? sermon.title_suggestions : [];
   const parsedRelatedThemes: string[] = Array.isArray(sermon.related_themes) ? sermon.related_themes : [];
   const parsedSocialPosts: SocialPost[] = Array.isArray(sermon.social_posts) ? sermon.social_posts : [];
-  const parsedSlides: Slide[] = Array.isArray(sermon.slides) ? sermon.slides : [];
+  const parsedSlides: Slide[] = Array.isArray(sermon.slides)
+    ? (sermon.slides as any[]).map((s: any) => ({
+        title: s?.title ?? s?.heading ?? "",
+        content: Array.isArray(s?.content)
+          ? s.content
+          : Array.isArray(s?.bullets)
+            ? s.bullets
+            : Array.isArray(s?.points)
+              ? s.points
+              : [],
+      }))
+    : [];
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8 animate-fade-in">
