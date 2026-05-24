@@ -127,6 +127,158 @@ function SermonDetail() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // ---- Edit state ----
+  const updateSermon = useServerFn(updateSermonFn);
+  const generatePostImage = useServerFn(generatePostImageFn);
+  const [editTitleOpen, setEditTitleOpen] = useState(false);
+  const [editDescOpen, setEditDescOpen] = useState(false);
+  const [editTopicsOpen, setEditTopicsOpen] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [introDraft, setIntroDraft] = useState("");
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [conclusionDraft, setConclusionDraft] = useState("");
+  const [topicsDraft, setTopicsDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // ---- Post image state ----
+  const [postImages, setPostImages] = useState<Record<number, string>>({});
+  const [generatingImageIdx, setGeneratingImageIdx] = useState<number | null>(null);
+
+  const openEditTitle = () => {
+    if (!sermon) return;
+    setTitleDraft(sermon.video_title || "");
+    setEditTitleOpen(true);
+  };
+  const openEditDesc = () => {
+    if (!sermon) return;
+    setIntroDraft(sermon.introduction || "");
+    setSummaryDraft(sermon.summary || "");
+    setConclusionDraft(sermon.conclusion || "");
+    setEditDescOpen(true);
+  };
+  const openEditTopics = () => {
+    if (!sermon) return;
+    const t = Array.isArray(sermon.topics) ? sermon.topics : [];
+    setTopicsDraft(t.join(", "));
+    setEditTopicsOpen(true);
+  };
+
+  const saveTitle = async () => {
+    if (!sermon) return;
+    setSaving(true);
+    try {
+      await updateSermon({ data: { id: sermon.id, video_title: titleDraft } });
+      setSermon({ ...sermon, video_title: titleDraft });
+      toast.success("Título atualizado!");
+      setEditTitleOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar título.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveDesc = async () => {
+    if (!sermon) return;
+    setSaving(true);
+    try {
+      await updateSermon({
+        data: { id: sermon.id, introduction: introDraft, summary: summaryDraft, conclusion: conclusionDraft },
+      });
+      setSermon({ ...sermon, introduction: introDraft, summary: summaryDraft, conclusion: conclusionDraft });
+      toast.success("Descrição atualizada!");
+      setEditDescOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar descrição.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTopics = async () => {
+    if (!sermon) return;
+    setSaving(true);
+    try {
+      const topics = topicsDraft.split(",").map((t) => t.trim()).filter(Boolean);
+      await updateSermon({ data: { id: sermon.id, topics } });
+      setSermon({ ...sermon, topics });
+      toast.success("Tópicos atualizados!");
+      setEditTopicsOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao atualizar tópicos.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const downloadSlidesPptx = async () => {
+    if (!sermon) return;
+    try {
+      const pptx = new PptxGenJS();
+      pptx.layout = "LAYOUT_16x9";
+      pptx.title = sermon.video_title || "Esboço de Pregação";
+      const slides = parsedSlidesData();
+      slides.forEach((slide, idx) => {
+        const s = pptx.addSlide();
+        s.background = { color: "030712" };
+        s.addText(`SLIDE ${idx + 1}`, {
+          x: 0.4, y: 0.3, w: 9, h: 0.3,
+          fontSize: 10, color: "D4AF37", bold: true, fontFace: "Arial",
+        });
+        s.addText(slide.title || "", {
+          x: 0.4, y: 0.65, w: 9, h: 1.1,
+          fontSize: 32, bold: true, color: "F1F5F9", fontFace: "Arial",
+        });
+        const bullets = (slide.content || []).map((c) => ({ text: c, options: { bullet: { code: "25CF" }, color: "CBD5E1" } }));
+        if (bullets.length) {
+          s.addText(bullets as any, {
+            x: 0.6, y: 1.9, w: 8.8, h: 3.2,
+            fontSize: 18, fontFace: "Arial", paraSpaceAfter: 8,
+          });
+        }
+        s.addText(`PregAI  •  ${sermon.preacher_name || ""}`, {
+          x: 0.4, y: 5.1, w: 9, h: 0.3,
+          fontSize: 10, color: "64748B", fontFace: "Arial",
+        });
+      });
+      await pptx.writeFile({ fileName: `${(sermon.video_title || "esboco").slice(0, 60)}.pptx` });
+      toast.success("Apresentação .pptx baixada!");
+    } catch (e: any) {
+      console.error(e);
+      toast.error("Erro ao gerar arquivo .pptx");
+    }
+  };
+
+  const parsedSlidesData = (): Slide[] => {
+    if (!sermon) return [];
+    return Array.isArray(sermon.slides)
+      ? (sermon.slides as any[]).map((s: any) => ({
+          title: s?.title ?? s?.heading ?? "",
+          content: Array.isArray(s?.content) ? s.content : Array.isArray(s?.bullets) ? s.bullets : Array.isArray(s?.points) ? s.points : [],
+        }))
+      : [];
+  };
+
+  const generateImageForPost = async (idx: number, post: SocialPost) => {
+    setGeneratingImageIdx(idx);
+    try {
+      const { imageUrl } = await generatePostImage({ data: { content: post.content, platform: post.platform } });
+      setPostImages((prev) => ({ ...prev, [idx]: imageUrl }));
+      toast.success("Imagem gerada!");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao gerar imagem.");
+    } finally {
+      setGeneratingImageIdx(null);
+    }
+  };
+
+  const downloadImage = (dataUrl: string, idx: number) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `post-${idx + 1}.png`;
+    a.click();
+  };
+
   if (loading) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
