@@ -279,6 +279,64 @@ function toJsonSchema(node: any): any {
   return node;
 }
 
+function parseSermonResponse(resJson: any): SermonAnalysis | null {
+  const message = resJson?.choices?.[0]?.message;
+  const toolArgs = message?.tool_calls?.[0]?.function?.arguments;
+  const rawContent = typeof message?.content === "string" ? message.content : "";
+  const candidates = [toolArgs, rawContent, extractJsonObject(rawContent)].filter(
+    (value): value is string => typeof value === "string" && value.trim() !== "" && value.trim() !== "null"
+  );
+
+  for (const candidate of candidates) {
+    try {
+      return assertValidSermonAnalysis(JSON.parse(candidate));
+    } catch (error) {
+      console.warn("[Lovable AI] Candidato JSON inválido, tentando próximo formato.", error);
+    }
+  }
+
+  return null;
+}
+
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
+function assertValidSermonAnalysis(value: any): SermonAnalysis {
+  if (!value || typeof value !== "object") {
+    throw new Error("Resposta da IA vazia ou inválida.");
+  }
+
+  const fallback = generateMockAnalysis();
+  return {
+    theme: ensureString(value.theme, fallback.theme),
+    verses: ensureArray(value.verses, fallback.verses),
+    summary: ensureString(value.summary, fallback.summary),
+    introduction: ensureString(value.introduction, fallback.introduction),
+    outline: ensureArray(value.outline, fallback.outline),
+    topics: ensureArray(value.topics, fallback.topics),
+    conclusion: ensureString(value.conclusion, fallback.conclusion),
+    applications: ensureArray(value.applications, fallback.applications),
+    impact_phrases: ensureArray(value.impact_phrases, fallback.impact_phrases),
+    script: ensureString(value.script, fallback.script),
+    title_suggestions: ensureArray(value.title_suggestions, fallback.title_suggestions),
+    related_themes: ensureArray(value.related_themes, fallback.related_themes),
+    social_posts: ensureArray(value.social_posts, fallback.social_posts),
+    slides: ensureArray(value.slides, fallback.slides),
+  };
+}
+
+function ensureString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function ensureArray<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) && value.length > 0 ? (value as T[]) : fallback;
+}
+
 function sanitizeSourceContent(text: string): string {
   return text
     .split(/(?<=[.!?])\s+|\n+/)
