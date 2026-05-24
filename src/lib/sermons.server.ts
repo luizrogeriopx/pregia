@@ -82,7 +82,7 @@ export const generateSermonFn = createServerFn({ method: "POST" })
       console.log(`[Sermon] Análise concluída pela IA.`);
     } catch (error: any) {
       console.error("[Gemini AI Error] Falha ao gerar análise:", error);
-      throw new Error(error?.message || "Erro ao gerar a análise de inteligência artificial da pregação.");
+      throw new Error(error?.message || "Erro ao gerar a análise de inteligência artificial da pregação. Nenhum crédito de esboço foi consumido porque o material não foi salvo.");
     }
 
     // 5. Save Sermon to Supabase Database
@@ -115,7 +115,7 @@ export const generateSermonFn = createServerFn({ method: "POST" })
 
     if (insertError) {
       console.error("[Database Error] Falha ao inserir sermão:", insertError);
-      throw new Error("Erro ao salvar o esboço no seu histórico. Tente novamente.");
+      throw new Error(`Erro ao salvar o esboço no seu histórico: ${insertError.message}`);
     }
 
     // 6. Increment Monthly Usage is bypassed as we now enforce a hard lifetime limit of 3 outlines for Free plan

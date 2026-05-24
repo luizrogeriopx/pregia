@@ -38,7 +38,7 @@ interface YouTubeVideoData {
   transcript: string;
   title: string;
   author: string;
-  extractionMethod: "library" | "caption-tracks" | "timedtext";
+  extractionMethod: "library" | "innertube" | "caption-tracks" | "timedtext";
 }
 
 /**
@@ -54,6 +54,7 @@ export async function fetchYoutubeTranscript(videoId: string): Promise<YouTubeVi
   }> = [
     { method: "library", run: () => fetchTranscriptWithLibrary(videoId, "pt") },
     { method: "library", run: () => fetchTranscriptWithLibrary(videoId) },
+    { method: "innertube", run: () => fetchTranscriptFromInnertube(videoId) },
     { method: "caption-tracks", run: () => fetchTranscriptFromCaptionTracks(videoId) },
     { method: "timedtext", run: () => fetchTranscriptFromTimedText(videoId) },
   ];
@@ -98,10 +99,48 @@ async function fetchTranscriptWithLibrary(videoId: string, lang?: string): Promi
   return transcriptData.map((item: any) => item.text).join(" ");
 }
 
+async function fetchTranscriptFromInnertube(videoId: string): Promise<string> {
+  const response = await withTimeout(
+    () =>
+      fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
+        method: "POST",
+        headers: {
+          ...WATCH_HEADERS,
+          "Content-Type": "application/json",
+          "X-YouTube-Client-Name": "1",
+          "X-YouTube-Client-Version": "2.20240501.00.00",
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: "WEB",
+              clientVersion: "2.20240501.00.00",
+              hl: "pt-BR",
+              gl: "BR",
+            },
+          },
+          videoId,
+        }),
+      }),
+    12000
+  );
+
+  if (!response.ok) {
+    throw new Error(`Innertube HTTP ${response.status}`);
+  }
+
+  const playerResponse = await response.json();
+  return readBestCaptionTrack(playerResponse);
+}
+
 async function fetchTranscriptFromCaptionTracks(videoId: string): Promise<string> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}&hl=pt&gl=BR&bpctr=9999999999&has_verified=1`;
   const html = await fetchText(watchUrl, 12000);
   const playerResponse = extractPlayerResponse(html);
+  return readBestCaptionTrack(playerResponse);
+}
+
+async function readBestCaptionTrack(playerResponse: any): Promise<string> {
   const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
 
   if (!Array.isArray(tracks) || tracks.length === 0) {

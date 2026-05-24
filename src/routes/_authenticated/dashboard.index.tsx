@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Youtube, Sparkles, Loader2, BookOpen, User, Calendar, Star, ArrowRight, Video } from "lucide-react";
@@ -31,6 +32,7 @@ const LOADING_STEPS = [
 function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const generateSermon = useServerFn(generateSermonFn);
   const { url: urlParam } = Route.useSearch();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -112,7 +114,7 @@ function Dashboard() {
     setLoadingStep(0);
     
     try {
-      const res = await generateSermonFn({ data: urlToAnalyze });
+      const res = await generateSermon({ data: urlToAnalyze });
       toast.success("Esboço gerado com excelência teológica!");
       
       // Refresh local data so it's ready if they come back

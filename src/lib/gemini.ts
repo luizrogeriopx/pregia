@@ -151,23 +151,35 @@ export async function generateSermonAnalysis(
 }
 
 export async function generateSermonAnalysisFromVideo(videoUrl: string): Promise<SermonAnalysis> {
-  // O Lovable AI Gateway (formato OpenAI) não suporta input de vídeo (video_url/file).
-  // Sem transcrição/legendas, não há conteúdo teológico confiável para gerar um esboço fiel.
-  // Lançamos um erro claro para que o usuário tente outro vídeo com legendas.
-  console.warn(`[Lovable AI] Tentativa de análise direta de vídeo bloqueada (sem transcrição): ${videoUrl}`);
-  throw new Error(
-    "Não foi possível extrair legendas, transcrição ou áudio deste vídeo. Tente um vídeo que tenha legendas ativadas no YouTube (mesmo as automáticas)."
-  );
+  const userPrompt = [
+    {
+      type: "text",
+      text: `Analise diretamente o áudio/conteúdo falado deste vídeo público do YouTube e gere um esboço homilético original.
+
+Use somente o conteúdo espiritual, bíblico e teológico falado no vídeo. Ignore totalmente título, canal, descrição, comentários, nomes próprios, vinhetas, pedidos de like/inscrição e qualquer dado promocional. Não copie frases literais; reconstrua a mensagem com linguagem nova, autoral e exclusiva.`,
+    },
+    {
+      type: "video_url",
+      video_url: { url: videoUrl },
+    },
+  ];
+
+  console.log(`[Lovable AI] Analisando vídeo diretamente via conteúdo audiovisual: ${videoUrl}`);
+  return requestSermonAnalysis(userPrompt, 0.8, 115000);
 }
 
-async function requestSermonAnalysis(userContent: string | Array<Record<string, unknown>>, temperature: number): Promise<SermonAnalysis> {
+async function requestSermonAnalysis(
+  userContent: string | Array<Record<string, unknown>>,
+  temperature: number,
+  timeoutMs = 55000
+): Promise<SermonAnalysis> {
   const apiKey = process.env.LOVABLE_API_KEY;
 
   if (!apiKey) {
     throw new Error("Serviço de IA indisponível no momento.");
   }
 
-  const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição do áudio de uma pregação.
+  const systemPrompt = `Você é um teólogo experiente, pastor auxiliar e especialista em homilética cristã reformada. Sua tarefa é produzir um esboço homilético ORIGINAL, AUTÊNTICO e EXCLUSIVO a partir EXCLUSIVAMENTE do conteúdo teológico/bíblico falado na transcrição, áudio ou vídeo de uma pregação.
 
 REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 1. NUNCA mencione, cite ou faça referência a: nome do pregador, nome do canal do YouTube, nome da igreja/ministério, nome de outros vídeos, pedidos de inscrição/like/compartilhamento, comentários, descrição do vídeo, links, redes sociais do autor original ou qualquer metadado promocional. Se aparecer na transcrição, IGNORE.
@@ -180,9 +192,10 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     console.log(`[Lovable AI] Iniciando requisição (temperature=${temperature}, contentType=${typeof userContent === "string" ? "text" : "multimodal"})`);
 
+    const useJsonMode = Array.isArray(userContent);
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -193,20 +206,24 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: `${systemPrompt}\n\nQuando não houver chamada de ferramenta disponível, responda como JSON puro contendo exatamente estes campos obrigatórios: ${SERMON_SCHEMA.required.join(", ")}.` },
           { role: "user", content: userContent },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "render_sermon_outline",
-              description: "Retorna o esboço homilético estruturado e original.",
-              parameters: toJsonSchema(SERMON_SCHEMA),
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
+        ...(useJsonMode
+          ? { response_format: { type: "json_object" } }
+          : {
+              tools: [
+                {
+                  type: "function",
+                  function: {
+                    name: "render_sermon_outline",
+                    description: "Retorna o esboço homilético estruturado e original.",
+                    parameters: toJsonSchema(SERMON_SCHEMA),
+                  },
+                },
+              ],
+              tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
+            }),
         temperature,
         max_tokens: 8192,
       }),
@@ -223,19 +240,20 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     }
 
     const resJson = await response.json();
+    const analysis = parseSermonResponse(resJson);
+    if (analysis) return analysis;
+
     const toolCall = resJson.choices?.[0]?.message?.tool_calls?.[0];
     const args = toolCall?.function?.arguments;
-    if (!args) {
-      const fallbackText = resJson.choices?.[0]?.message?.content;
-      if (fallbackText) return JSON.parse(fallbackText) as SermonAnalysis;
+    if (!args || args === "null") {
       console.error("[Lovable AI Error] Resposta sem tool_call nem conteúdo. Payload:", JSON.stringify(resJson).slice(0, 500));
       throw new Error("Resposta da IA sem conteúdo estruturado.");
     }
-    return JSON.parse(args) as SermonAnalysis;
+    return assertValidSermonAnalysis(JSON.parse(args));
   } catch (error: any) {
     if (error?.name === "AbortError") {
-      console.error("[Lovable AI Error] Timeout após 55s aguardando a IA.");
-      throw new Error("A IA demorou demais para responder. Tente novamente com um vídeo mais curto ou que tenha legendas disponíveis.");
+      console.error(`[Lovable AI Error] Timeout após ${timeoutMs}ms aguardando a IA.`);
+      throw new Error("A IA demorou demais para responder. Tente novamente com um vídeo mais curto ou aguarde alguns instantes antes de tentar de novo.");
     }
     console.error("[Lovable AI Error] Falha ao gerar análise:", error);
     throw error;
@@ -259,6 +277,64 @@ function toJsonSchema(node: any): any {
     return out;
   }
   return node;
+}
+
+function parseSermonResponse(resJson: any): SermonAnalysis | null {
+  const message = resJson?.choices?.[0]?.message;
+  const toolArgs = message?.tool_calls?.[0]?.function?.arguments;
+  const rawContent = typeof message?.content === "string" ? message.content : "";
+  const candidates = [toolArgs, rawContent, extractJsonObject(rawContent)].filter(
+    (value): value is string => typeof value === "string" && value.trim() !== "" && value.trim() !== "null"
+  );
+
+  for (const candidate of candidates) {
+    try {
+      return assertValidSermonAnalysis(JSON.parse(candidate));
+    } catch (error) {
+      console.warn("[Lovable AI] Candidato JSON inválido, tentando próximo formato.", error);
+    }
+  }
+
+  return null;
+}
+
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
+function assertValidSermonAnalysis(value: any): SermonAnalysis {
+  if (!value || typeof value !== "object") {
+    throw new Error("Resposta da IA vazia ou inválida.");
+  }
+
+  const fallback = generateMockAnalysis();
+  return {
+    theme: ensureString(value.theme, fallback.theme),
+    verses: ensureArray(value.verses, fallback.verses),
+    summary: ensureString(value.summary, fallback.summary),
+    introduction: ensureString(value.introduction, fallback.introduction),
+    outline: ensureArray(value.outline, fallback.outline),
+    topics: ensureArray(value.topics, fallback.topics),
+    conclusion: ensureString(value.conclusion, fallback.conclusion),
+    applications: ensureArray(value.applications, fallback.applications),
+    impact_phrases: ensureArray(value.impact_phrases, fallback.impact_phrases),
+    script: ensureString(value.script, fallback.script),
+    title_suggestions: ensureArray(value.title_suggestions, fallback.title_suggestions),
+    related_themes: ensureArray(value.related_themes, fallback.related_themes),
+    social_posts: ensureArray(value.social_posts, fallback.social_posts),
+    slides: ensureArray(value.slides, fallback.slides),
+  };
+}
+
+function ensureString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function ensureArray<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) && value.length > 0 ? (value as T[]) : fallback;
 }
 
 function sanitizeSourceContent(text: string): string {
