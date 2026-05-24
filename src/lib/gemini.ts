@@ -280,7 +280,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
 
     const resJson = await response.json();
     const analysis = parseSermonResponse(resJson);
-    if (analysis) return analysis;
+    if (analysis) return await enrichVerseTexts(analysis);
 
     const toolCall = resJson.choices?.[0]?.message?.tool_calls?.[0];
     const args = toolCall?.function?.arguments;
@@ -288,7 +288,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
       console.error("[Lovable AI Error] Resposta sem tool_call nem conteúdo. Payload:", JSON.stringify(resJson).slice(0, 500));
       throw new Error("Resposta da IA sem conteúdo estruturado.");
     }
-    return assertValidSermonAnalysis(JSON.parse(args));
+    return await enrichVerseTexts(assertValidSermonAnalysis(JSON.parse(args)));
   } catch (error: any) {
     if (error?.name === "AbortError") {
       console.error(`[Lovable AI Error] Timeout após ${timeoutMs}ms aguardando a IA.`);
