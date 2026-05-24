@@ -195,6 +195,7 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     console.log(`[Lovable AI] Iniciando requisição (temperature=${temperature}, contentType=${typeof userContent === "string" ? "text" : "multimodal"})`);
 
+    const useJsonMode = Array.isArray(userContent);
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -205,20 +206,24 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: `${systemPrompt}\n\nQuando não houver chamada de ferramenta disponível, responda como JSON puro contendo exatamente estes campos obrigatórios: ${SERMON_SCHEMA.required.join(", ")}.` },
           { role: "user", content: userContent },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "render_sermon_outline",
-              description: "Retorna o esboço homilético estruturado e original.",
-              parameters: toJsonSchema(SERMON_SCHEMA),
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
+        ...(useJsonMode
+          ? { response_format: { type: "json_object" } }
+          : {
+              tools: [
+                {
+                  type: "function",
+                  function: {
+                    name: "render_sermon_outline",
+                    description: "Retorna o esboço homilético estruturado e original.",
+                    parameters: toJsonSchema(SERMON_SCHEMA),
+                  },
+                },
+              ],
+              tool_choice: { type: "function", function: { name: "render_sermon_outline" } },
+            }),
         temperature,
         max_tokens: 8192,
       }),
@@ -235,15 +240,16 @@ REGRAS ABSOLUTAS E INEGOCIÁVEIS:
     }
 
     const resJson = await response.json();
+    const analysis = parseSermonResponse(resJson);
+    if (analysis) return analysis;
+
     const toolCall = resJson.choices?.[0]?.message?.tool_calls?.[0];
     const args = toolCall?.function?.arguments;
-    if (!args) {
-      const fallbackText = resJson.choices?.[0]?.message?.content;
-      if (fallbackText) return JSON.parse(fallbackText) as SermonAnalysis;
+    if (!args || args === "null") {
       console.error("[Lovable AI Error] Resposta sem tool_call nem conteúdo. Payload:", JSON.stringify(resJson).slice(0, 500));
       throw new Error("Resposta da IA sem conteúdo estruturado.");
     }
-    return JSON.parse(args) as SermonAnalysis;
+    return assertValidSermonAnalysis(JSON.parse(args));
   } catch (error: any) {
     if (error?.name === "AbortError") {
       console.error(`[Lovable AI Error] Timeout após ${timeoutMs}ms aguardando a IA.`);
