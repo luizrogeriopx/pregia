@@ -25,7 +25,7 @@ const SERMON_SCHEMA = {
     theme: { type: "STRING", description: "O tema teológico central da pregação" },
     verses: {
       type: "ARRAY",
-      description: "Lista de versículos bíblicos citados ou que servem de base",
+      description: "Lista de versículos bíblicos citados ou que servem de base. Sempre retorne objetos com reference e text; nunca retorne apenas strings.",
       items: {
         type: "OBJECT",
         properties: {
@@ -352,7 +352,10 @@ function assertValidSermonAnalysis(value: any): SermonAnalysis {
   const fallback = generateMockAnalysis();
   return {
     theme: ensureString(value.theme, fallback.theme),
-    verses: ensureArray(value.verses, fallback.verses),
+    verses: normalizeVerses(
+      value.verses ?? value.base_verses ?? value.key_verses ?? value.biblical_texts ?? value.scriptures,
+      fallback.verses
+    ),
     summary: ensureString(value.summary, fallback.summary),
     introduction: ensureString(value.introduction, fallback.introduction),
     outline: normalizeOutline(value.outline, fallback.outline),
@@ -374,6 +377,37 @@ function ensureString(value: unknown, fallback: string): string {
 
 function ensureArray<T>(value: unknown, fallback: T[]): T[] {
   return Array.isArray(value) && value.length > 0 ? (value as T[]) : fallback;
+}
+
+function normalizeVerses(
+  value: unknown,
+  fallback: Array<{ reference: string; text: string }>
+): Array<{ reference: string; text: string }> {
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+
+  const normalized = value
+    .map((item: any) => {
+      if (typeof item === "string") {
+        const reference = item.trim();
+        return reference ? { reference, text: "Texto bíblico base identificado na pregação." } : null;
+      }
+
+      if (!item || typeof item !== "object") return null;
+
+      const reference = ensureString(
+        item.reference ?? item.ref ?? item.verse ?? item.citation ?? item.passage ?? item.texto,
+        ""
+      );
+      const text = ensureString(
+        item.text ?? item.content ?? item.verse_text ?? item.biblical_text ?? item.texto_biblico,
+        "Texto bíblico base identificado na pregação."
+      );
+
+      return reference ? { reference, text } : null;
+    })
+    .filter(Boolean) as Array<{ reference: string; text: string }>;
+
+  return normalized.length > 0 ? normalized : fallback;
 }
 
 function normalizeOutline(
